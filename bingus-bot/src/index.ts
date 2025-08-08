@@ -12,7 +12,22 @@ import {
   SlashCommandOptionsOnlyBuilder,
   UserContextMenuCommandInteraction,
 } from "discord.js";
-import auth from "../auth.json" with { type: "json" };
+// Load auth configuration with fallback for different deployment scenarios
+function loadAuth(): { token: string; client: string; forumsCheck: string[] } {
+  try {
+    // Try to load from auth.json file (docker-compose/local development)
+    return require("../auth.json");
+  } catch {
+    // Fallback to environment variables (Kubernetes/container deployments)
+    return {
+      token: process.env.DISCORD_TOKEN || "",
+      client: process.env.DISCORD_CLIENT_ID || "",
+      forumsCheck: process.env.DISCORD_FORUMS ? JSON.parse(process.env.DISCORD_FORUMS) : []
+    };
+  }
+}
+
+const auth = loadAuth();
 import {
   BINGUS_EMOJI,
   EmbedList,

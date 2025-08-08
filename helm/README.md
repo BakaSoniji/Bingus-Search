@@ -94,9 +94,12 @@ helm install bingus ./helm \
 | `bot.enabled` | Enable bot service | `true` |
 | `bot.replicaCount` | Number of replicas | `1` |
 | `bot.image.tag` | Image tag | `latest` |
+| `bot.secrets.discordToken` | Discord bot token | `""` |
+| `bot.secrets.discordClientId` | Discord application/client ID | `""` |
+| `bot.secrets.discordForums` | JSON array of forum IDs to monitor | `""` |
 | `bot.secrets.extraSecrets` | Additional secret key/values | `{}` |
-| `bot.config.commandPrefix` | Bot command prefix | `!` |
-| `bot.config.maxResultsPerSearch` | Max results per search | `10` |
+| `bot.config.nodeEnv` | Node.js environment | `production` |
+| `bot.config.apiUrl` | API service URL | `http://bingus-api:8080` |
 
 ### Security Context
 
@@ -173,7 +176,35 @@ api:
 bot:
   secrets:
     discordToken: "your-dev-bot-token"
+    discordClientId: "your-app-id"
+    discordForums: '["123456789012345678"]'
 ```
+
+## Deployment Approaches
+
+### Kubernetes (Recommended)
+Uses environment variables for configuration, supporting both secrets and configmaps:
+
+```yaml
+bot:
+  secrets:
+    discordToken: "your-bot-token"
+    discordClientId: "your-client-id"
+    discordForums: '["forum-id-1", "forum-id-2"]'
+```
+
+### Docker Compose (Local Development)
+Uses `auth.json` file mount for backward compatibility:
+
+```yaml
+# docker-compose.yml
+services:
+  bingus-bot:
+    volumes:
+      - ./bingus-bot/auth.json:/app/bingus-bot/auth.json
+```
+
+The bot automatically detects the environment and falls back to environment variables if `auth.json` is not found.
 
 ## Upgrading
 

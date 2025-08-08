@@ -26,6 +26,27 @@ spec:
           image: {{ include "bingus.image" (dict "repository" .Values.bot.image.repository "tag" .Values.bot.image.tag "Chart" .Chart "Values" .Values) }}
           imagePullPolicy: {{ .Values.bot.image.pullPolicy }}
           env:
+            {{- if .Values.bot.secrets.discordToken }}
+            - name: DISCORD_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "bingus.fullname" . }}-bot-secret
+                  key: discordToken
+            {{- end }}
+            {{- if .Values.bot.secrets.discordClientId }}
+            - name: DISCORD_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "bingus.fullname" . }}-bot-secret
+                  key: discordClientId
+            {{- end }}
+            {{- if .Values.bot.secrets.discordForums }}
+            - name: DISCORD_FORUMS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "bingus.fullname" . }}-bot-secret
+                  key: discordForums
+            {{- end }}
             {{- if .Values.bot.config.extraEnv }}
             {{- range $key, $value := .Values.bot.config.extraEnv }}
             - name: {{ $key }}

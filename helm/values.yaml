@@ -156,7 +156,13 @@ bot:
     extraEnv: {}
 
   secrets:
-    # Bot auth is mounted as volume from auth.json file
+    # Discord bot configuration (K8s-friendly approach)
+    # For backward compatibility, auth.json file can still be used via docker-compose
+    discordToken: ""           # Discord bot token
+    discordClientId: ""        # Discord application/client ID
+    discordForums: ""          # JSON array of forum IDs to monitor, e.g. '["123456789"]'
+
+    # Additional custom secrets
     extraSecrets: {}
 
   probes:
