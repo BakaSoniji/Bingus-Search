@@ -1,31 +1,5 @@
 # Bingus
 
-## Release Process (CalVer + Cloudflare)
-
-This fork uses a simple, automated release pipeline:
-
-- Versioning: CalVer `vYYYY.MM.P` (e.g., `v2025.08.0`), auto-incremented on each push to `main`.
-- Pipeline: On push to `main`, GitHub Actions will:
-  - Build and push containers for `encoder`, `api`, and `bot` with tags `latest` and `vYYYY.MM.P`.
-  - Update and package the Helm chart (`helm/`) with the same CalVer version and publish to OCI.
-  - Create a GitHub Release with a generated changelog.
-  - Optionally deploy the frontend to Cloudflare R2 (enable via repo variable `ENABLE_FRONTEND_DEPLOYMENT=true`).
-
-### Configure Cloudflare Frontend Deployment (optional)
-
-Set the following in GitHub → Settings → Secrets and variables:
-
-- Variables:
-  - `ENABLE_FRONTEND_DEPLOYMENT=true`
-  - `CLOUDFLARE_R2_BUCKET_NAME=<your-bucket>`
-  - `FRONTEND_API_BASE_URL=<your-api>` (optional; defaults to code’s built-in URL)
-  - `CLOUDFLARE_ZONE_ID` (optional, for cache purging)
-- Secrets:
-  - `CLOUDFLARE_API_TOKEN`
-  - `CLOUDFLARE_ACCOUNT_ID`
-
-The frontend code defaults to `https://bingus.slimevr.io`. To override, set `FRONTEND_API_BASE_URL`.
-
 ## Recommended Models
 
 - <https://tfhub.dev/google/universal-sentence-encoder-large/5>

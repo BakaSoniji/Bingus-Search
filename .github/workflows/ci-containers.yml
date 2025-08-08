@@ -35,7 +35,7 @@ jobs:
       has-code-changes: ${{ steps.check.outputs.has-code-changes }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v2
+      - uses: dorny/paths-filter@v3
         id: changes
         with:
           filters: |
@@ -84,9 +84,9 @@ jobs:
       # Python linting for encoder
       - name: Set up Python
         if: needs.detect-changes.outputs.encoder == 'true'
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.14'
+          python-version: '3.12'
 
       - name: Lint Python code (encoder)
         if: needs.detect-changes.outputs.encoder == 'true'
@@ -149,9 +149,9 @@ jobs:
 
       - name: Set up Python
         if: steps.check.outputs.changed == 'true' && matrix.service == 'encoder'
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
 
       - name: Set up .NET
         if: steps.check.outputs.changed == 'true' && matrix.service == 'api'
@@ -306,7 +306,7 @@ jobs:
 
       - name: Run Trivy vulnerability scanner
         if: steps.check.outputs.changed == 'true'
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.20.0
         with:
           image-ref: '${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.service }}:${{ github.sha }}'
           format: 'sarif'
@@ -314,7 +314,7 @@ jobs:
 
       - name: Upload Trivy scan results
         if: steps.check.outputs.changed == 'true'
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: 'trivy-results-${{ matrix.service }}.sarif'
 
@@ -340,10 +340,7 @@ jobs:
           helm template bingus helm/ > /tmp/rendered-manifests.yaml
           echo "✅ Helm chart templates render successfully"
 
-      - name: Validate Kubernetes manifests
-        uses: instrumenta/kubeval-action@master
-        with:
-          files: /tmp/rendered-manifests.yaml
+      # Skipping kubeval validation step to avoid deprecated action; Helm lint & template already run
 
   integration-test:
     runs-on: ubuntu-latest

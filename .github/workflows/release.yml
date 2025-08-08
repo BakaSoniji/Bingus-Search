@@ -149,7 +149,7 @@ jobs:
           helm repo index ./charts/ --url https://github.com/${{ github.repository }}/releases/download/${{ needs.validate-release.outputs.version }}/
 
       - name: Upload Helm chart artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: helm-charts
           path: ./charts/
@@ -165,7 +165,7 @@ jobs:
           fetch-depth: 0
 
       - name: Download Helm charts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: helm-charts
           path: ./charts/
@@ -202,7 +202,7 @@ jobs:
           echo "\`\`\`" >> CHANGELOG.md
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.validate-release.outputs.version }}
           name: Release ${{ needs.validate-release.outputs.version }}
