@@ -1,0 +1,27 @@
+{{- if .Values.api.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "bingus.fullname" . }}-api-config
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "bingus.api.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+data:
+    # .NET API configuration
+  ASPNETCORE_ENVIRONMENT: {{ .Values.api.config.aspnetcoreEnvironment | quote }}
+  ASPNETCORE_URLS: {{ .Values.api.config.aspnetcoreUrls | quote }}
+
+  # Service URLs
+  ENCODER_URL: {{ .Values.api.config.encoderUrl | quote }}
+
+  # Logging
+  Logging__LogLevel__Default: {{ .Values.api.config.logLevel | quote }}
+
+  {{- if .Values.api.config.extraEnv }}
+  # Additional environment variables
+  {{- range $key, $value := .Values.api.config.extraEnv }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+  {{- end }}
+{{- end }}

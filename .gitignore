@@ -397,6 +397,9 @@ FodyWeavers.xsd
 # JetBrains Rider
 *.sln.iml
 
+# JetBrains IDEs
+.idea/
+
 ## Added GitIgnore Entries for Bingus
 
 # Python Environments

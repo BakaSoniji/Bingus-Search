@@ -1,0 +1,208 @@
+global:
+  namespace: bingus
+  createNamespace: true
+  namespaceLabels:
+    app.kubernetes.io/part-of: bingus
+  # Container registry prefix, e.g., ghcr.io/<owner>/<repo>
+  # Example: ghcr.io/BakaSoniji/Bingus-Search
+  registry: ghcr.io/BakaSoniji/Bingus-Search
+
+encoder:
+  enabled: true
+  name: encoder
+  replicaCount: 1
+
+  image:
+    repository: encoder
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 5000
+    targetPort: 5000
+
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+
+  probes:
+    liveness:
+      enabled: true
+      path: /dimensions/
+      initialDelaySeconds: 120
+      periodSeconds: 30
+      timeoutSeconds: 10
+    readiness:
+      enabled: true
+      path: /dimensions/
+      initialDelaySeconds: 60
+      periodSeconds: 15
+      timeoutSeconds: 5
+
+  persistence:
+    embeddingCache:
+      enabled: true
+      size: 5Gi
+      storageClass: ""
+    modelCache:
+      enabled: true
+      size: 10Gi
+      storageClass: ""
+    localModels:
+      enabled: true
+      size: 5Gi
+      storageClass: ""
+
+  config:
+    modelName: "sentence-transformers/all-MiniLM-L6-v2"
+    maxSequenceLength: 512
+    batchSize: 32
+    cacheTTL: 3600
+    workers: 2
+    logLevel: "INFO"
+    extraEnv: {}
+
+api:
+  enabled: true
+  name: api
+  replicaCount: 1
+
+  image:
+    repository: api
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 8080
+    targetPort: 8080
+
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+  ingress:
+    enabled: true
+    hostname: bingus.bakas.io
+    accessPolicy: public   # Public access via Traefik
+
+  persistence:
+    enabled: false
+    size: 2Gi
+    storageClass: ""
+    subPath: ""
+
+  config:
+    aspnetcoreEnvironment: "Production"
+    aspnetcoreUrls: "http://+:8080"
+    encoderUrl: "http://bingus-encoder:5000"
+    logLevel: "Information"
+    extraEnv: {}
+
+  secrets:
+    # .NET API doesn't need database URL - uses in-memory or config
+    extraSecrets: {}
+
+  probes:
+    liveness:
+      path: "/health"
+      initialDelaySeconds: 30
+      periodSeconds: 30
+      timeoutSeconds: 5
+      failureThreshold: 3
+    readiness:
+      path: "/ready"
+      initialDelaySeconds: 15
+      periodSeconds: 10
+      timeoutSeconds: 3
+      failureThreshold: 3
+
+  dependsOn:
+    - encoder
+
+bot:
+  enabled: true
+  name: bot
+  replicaCount: 1
+
+  image:
+    repository: bot
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  service:
+    enabled: false
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+  config:
+    nodeEnv: "production"
+    apiUrl: "http://bingus-api:8080"
+    extraEnv: {}
+
+  secrets:
+    # Bot auth is mounted as volume from auth.json file
+    extraSecrets: {}
+
+  probes:
+    liveness:
+      enabled: true
+      initialDelaySeconds: 30
+      periodSeconds: 60
+      timeoutSeconds: 5
+      failureThreshold: 3
+    readiness:
+      enabled: true
+      initialDelaySeconds: 15
+      periodSeconds: 30
+      timeoutSeconds: 5
+      failureThreshold: 3
+
+  auth:
+    secretName: bingus-bot-auth
+
+  dependsOn:
+    - api
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  runAsGroup: 1001
+  fsGroup: 1001
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false  # Some services need write access
+  capabilities:
+    drop:
+      - ALL
+
+nodeSelector: {}
+tolerations: []
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - bingus
+          topologyKey: kubernetes.io/hostname

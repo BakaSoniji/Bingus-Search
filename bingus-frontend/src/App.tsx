@@ -108,7 +108,9 @@ function App() {
   };
 
   const queryBingus = async (query: string, responseCount = 30) => {
-    const url = new URL("https://bingus.slimevr.io/faq/search");
+    // Use build-time environment variable with fallback to original URL
+    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "https://bingus.slimevr.io";
+    const url = new URL(`${apiBaseUrl}/faq/search`);
 
     setLoadingResults(true);
 

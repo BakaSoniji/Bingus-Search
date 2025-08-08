@@ -1,0 +1,102 @@
+{{- if .Values.encoder.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "bingus.fullname" . }}-encoder
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "bingus.encoder.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.encoder.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "bingus.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: encoder
+  template:
+    metadata:
+      labels:
+        {{- include "bingus.encoder.labels" . | nindent 8 }}
+    spec:
+      {{- with .Values.securityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: encoder
+        image: {{ include "bingus.image" (dict "repository" .Values.encoder.image.repository "tag" .Values.encoder.image.tag "Chart" .Chart "Values" .Values) }}
+        imagePullPolicy: {{ .Values.encoder.image.pullPolicy }}
+        ports:
+        - containerPort: {{ .Values.encoder.service.targetPort }}
+          name: http
+          protocol: TCP
+        {{- if .Values.encoder.probes.liveness.enabled }}
+        livenessProbe:
+          httpGet:
+            path: {{ .Values.encoder.probes.liveness.path }}
+            port: http
+          initialDelaySeconds: {{ .Values.encoder.probes.liveness.initialDelaySeconds }}
+          periodSeconds: {{ .Values.encoder.probes.liveness.periodSeconds }}
+          timeoutSeconds: {{ .Values.encoder.probes.liveness.timeoutSeconds }}
+        {{- end }}
+        {{- if .Values.encoder.probes.readiness.enabled }}
+        readinessProbe:
+          httpGet:
+            path: {{ .Values.encoder.probes.readiness.path }}
+            port: http
+          initialDelaySeconds: {{ .Values.encoder.probes.readiness.initialDelaySeconds }}
+          periodSeconds: {{ .Values.encoder.probes.readiness.periodSeconds }}
+          timeoutSeconds: {{ .Values.encoder.probes.readiness.timeoutSeconds }}
+        {{- end }}
+        resources:
+          {{- toYaml .Values.encoder.resources | nindent 10 }}
+        {{- with .Values.containerSecurityContext }}
+        securityContext:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        volumeMounts:
+        {{- if .Values.encoder.persistence.modelCache.enabled }}
+        - name: model-cache
+          mountPath: /usr/src/app/model-cache
+        {{- end }}
+        {{- if .Values.encoder.persistence.localModels.enabled }}
+        - name: local-models
+          mountPath: /usr/src/app/local-models
+        {{- end }}
+        {{- if .Values.encoder.persistence.embeddingCache.enabled }}
+        - name: embedding-cache
+          mountPath: /usr/src/app/embedding-cache
+        {{- end }}
+        - name: config
+          mountPath: /usr/src/app/config
+      volumes:
+      {{- if .Values.encoder.persistence.modelCache.enabled }}
+      - name: model-cache
+        persistentVolumeClaim:
+          claimName: {{ include "bingus.fullname" . }}-encoder-model-cache
+      {{- end }}
+      {{- if .Values.encoder.persistence.localModels.enabled }}
+      - name: local-models
+        persistentVolumeClaim:
+          claimName: {{ include "bingus.fullname" . }}-encoder-local-models
+      {{- end }}
+      {{- if .Values.encoder.persistence.embeddingCache.enabled }}
+      - name: embedding-cache
+        persistentVolumeClaim:
+          claimName: {{ include "bingus.fullname" . }}-encoder-embedding-cache
+      {{- end }}
+      - name: config
+        configMap:
+          name: {{ include "bingus.fullname" . }}-encoder-config
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
