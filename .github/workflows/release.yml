@@ -83,7 +83,7 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: ${{ matrix.service == 'encoder' && 'bingus-python-encoder' || '.' }}
           file: ${{ matrix.service == 'encoder' && 'bingus-python-encoder/Dockerfile' || (matrix.service == 'api' && 'api.Dockerfile' || 'bot.Dockerfile') }}
           platforms: linux/amd64,linux/arm64
           push: true
