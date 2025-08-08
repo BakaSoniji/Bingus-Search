@@ -295,14 +295,18 @@ jobs:
           echo "✅ Deployment completed"
 
       - name: Purge Cloudflare cache
-        if: secrets.CLOUDFLARE_ZONE_ID && secrets.CLOUDFLARE_CACHE_API_TOKEN
         run: |
-          echo "🧹 Purging Cloudflare cache for zone: ${{ secrets.CLOUDFLARE_ZONE_ID }}"
-          curl -X POST "https://api.cloudflare.com/client/v4/zones/${{ secrets.CLOUDFLARE_ZONE_ID }}/purge_cache" \
-            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_CACHE_API_TOKEN }}" \
-            -H "Content-Type: application/json" \
-            --data '{"purge_everything":true}' \
-            --fail
+          if [[ -n "${{ secrets.CLOUDFLARE_ZONE_ID }}" && -n "${{ secrets.CLOUDFLARE_CACHE_API_TOKEN }}" ]]; then
+            echo "🧹 Purging Cloudflare cache for zone: ${{ secrets.CLOUDFLARE_ZONE_ID }}"
+            curl -X POST "https://api.cloudflare.com/client/v4/zones/${{ secrets.CLOUDFLARE_ZONE_ID }}/purge_cache" \
+              -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_CACHE_API_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              --data '{"purge_everything":true}' \
+              --fail
+            echo "✅ Cache purged successfully"
+          else
+            echo "ℹ️ Skipping cache purge - CLOUDFLARE_ZONE_ID or CLOUDFLARE_CACHE_API_TOKEN not configured"
+          fi
 
   notify-release:
     runs-on: ubuntu-latest
