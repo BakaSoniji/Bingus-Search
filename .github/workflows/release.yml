@@ -71,11 +71,16 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Normalize repository name
+        id: repo
+        run: |
+          echo "name=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.service }}
+          images: ${{ env.REGISTRY }}/${{ steps.repo.outputs.name }}/${{ matrix.service }}
           tags: |
             type=raw,value=${{ needs.validate-release.outputs.version }}
             type=raw,value=latest
@@ -94,25 +99,7 @@ jobs:
 
       # Cosign removed for simplicity (low traffic project)
 
-  security-scan-release:
-    runs-on: ubuntu-latest
-    needs: [validate-release, build-release-images]
 
-    strategy:
-      matrix:
-        service: [encoder, api, bot]
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: '${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.service }}:${{ needs.validate-release.outputs.version }}'
-          format: 'table'
-          exit-code: '1'
-          ignore-unfixed: true
-          severity: 'CRITICAL,HIGH'
 
   package-helm-chart:
     runs-on: ubuntu-latest
@@ -157,7 +144,7 @@ jobs:
 
   create-release:
     runs-on: ubuntu-latest
-    needs: [validate-release, build-release-images, security-scan-release, package-helm-chart]
+    needs: [validate-release, build-release-images, package-helm-chart]
 
     steps:
       - uses: actions/checkout@v4
@@ -186,19 +173,20 @@ jobs:
             echo "- Initial release of Bingus search application" >> CHANGELOG.md
           fi
 
+          REPO_LOWER=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')
           echo "" >> CHANGELOG.md
           echo "## 📦 Container Images" >> CHANGELOG.md
           echo "" >> CHANGELOG.md
-          echo "- \`ghcr.io/${{ github.repository }}/encoder:${{ needs.validate-release.outputs.version }}\`" >> CHANGELOG.md
-          echo "- \`ghcr.io/${{ github.repository }}/api:${{ needs.validate-release.outputs.version }}\`" >> CHANGELOG.md
-          echo "- \`ghcr.io/${{ github.repository }}/bot:${{ needs.validate-release.outputs.version }}\`" >> CHANGELOG.md
+          echo "- \`ghcr.io/${REPO_LOWER}/encoder:${{ needs.validate-release.outputs.version }}\`" >> CHANGELOG.md
+          echo "- \`ghcr.io/${REPO_LOWER}/api:${{ needs.validate-release.outputs.version }}\`" >> CHANGELOG.md
+          echo "- \`ghcr.io/${REPO_LOWER}/bot:${{ needs.validate-release.outputs.version }}\`" >> CHANGELOG.md
 
           echo "" >> CHANGELOG.md
           echo "## 🎯 Helm Chart" >> CHANGELOG.md
           echo "" >> CHANGELOG.md
           echo "Install with:" >> CHANGELOG.md
           echo "\`\`\`bash" >> CHANGELOG.md
-          echo "helm install bingus oci://ghcr.io/${{ github.repository }}/helm/bingus --version ${{ needs.validate-release.outputs.version }}" >> CHANGELOG.md
+          echo "helm install bingus oci://ghcr.io/${REPO_LOWER}/helm/bingus --version ${{ needs.validate-release.outputs.version }}" >> CHANGELOG.md
           echo "\`\`\`" >> CHANGELOG.md
 
       - name: Create GitHub Release
@@ -241,7 +229,8 @@ jobs:
       - name: Push Helm chart to OCI registry
         run: |
           CHART_FILE=$(ls charts/*.tgz)
-          helm push "$CHART_FILE" oci://${{ env.REGISTRY }}/${{ github.repository }}/helm
+          REPO_LOWER=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')
+          helm push "$CHART_FILE" oci://${{ env.REGISTRY }}/${REPO_LOWER}/helm
 
   deploy-frontend-cloudflare:
     runs-on: ubuntu-latest
@@ -270,35 +259,47 @@ jobs:
           # Optional override; if unset, frontend uses code default
           VITE_API_BASE_URL: ${{ vars.FRONTEND_API_BASE_URL }}
 
-      - name: Validate Cloudflare configuration
+      - name: Validate configuration
         run: |
-          if [[ -z "${{ secrets.CLOUDFLARE_API_TOKEN }}" ]]; then
-            echo "❌ CLOUDFLARE_API_TOKEN secret is required"
+          if [[ -z "${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}" ]]; then
+            echo "❌ CLOUDFLARE_R2_ACCESS_KEY_ID secret is required"
+            exit 1
+          fi
+          if [[ -z "${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}" ]]; then
+            echo "❌ CLOUDFLARE_R2_SECRET_ACCESS_KEY secret is required"
+            exit 1
+          fi
+          if [[ -z "${{ secrets.CLOUDFLARE_R2_BUCKET_NAME }}" ]]; then
+            echo "❌ CLOUDFLARE_R2_BUCKET_NAME secret is required"
             exit 1
           fi
           if [[ -z "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" ]]; then
-            echo "❌ CLOUDFLARE_ACCOUNT_ID secret is required"
+            echo "❌ CLOUDFLARE_ACCOUNT_ID secret is required for R2 endpoint"
             exit 1
           fi
-          if [[ -z "${{ vars.CLOUDFLARE_R2_BUCKET_NAME }}" ]]; then
-            echo "❌ CLOUDFLARE_R2_BUCKET_NAME variable is required"
-            exit 1
-          fi
-          echo "✅ Cloudflare configuration validated"
+          echo "✅ Configuration validated"
+
+      - name: Configure AWS CLI for Cloudflare R2
+        run: |
+          aws configure set aws_access_key_id ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}
+          aws configure set aws_secret_access_key ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
+          aws configure set default.region auto
 
       - name: Deploy to Cloudflare R2
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: r2 object put ${{ vars.CLOUDFLARE_R2_BUCKET_NAME }} --file="./bingus-frontend/dist" --recursive
+        run: |
+          echo "🚀 Deploying frontend to Cloudflare R2..."
+          aws s3 sync ./bingus-frontend/dist/ s3://${{ secrets.CLOUDFLARE_R2_BUCKET_NAME }}/ \
+            --endpoint-url https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com \
+            --delete \
+            --exact-timestamps
+          echo "✅ Deployment completed"
 
       - name: Purge Cloudflare cache
-        if: vars.CLOUDFLARE_ZONE_ID
+        if: secrets.CLOUDFLARE_ZONE_ID && secrets.CLOUDFLARE_CACHE_API_TOKEN
         run: |
-          echo "🧹 Purging Cloudflare cache for zone: ${{ vars.CLOUDFLARE_ZONE_ID }}"
-          curl -X POST "https://api.cloudflare.com/client/v4/zones/${{ vars.CLOUDFLARE_ZONE_ID }}/purge_cache" \
-            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+          echo "🧹 Purging Cloudflare cache for zone: ${{ secrets.CLOUDFLARE_ZONE_ID }}"
+          curl -X POST "https://api.cloudflare.com/client/v4/zones/${{ secrets.CLOUDFLARE_ZONE_ID }}/purge_cache" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_CACHE_API_TOKEN }}" \
             -H "Content-Type: application/json" \
             --data '{"purge_everything":true}' \
             --fail

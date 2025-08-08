@@ -19,12 +19,14 @@ Set the following in GitHub → Settings → Secrets and variables:
 
 - Variables:
     - `ENABLE_FRONTEND_DEPLOYMENT=true`
-    - `CLOUDFLARE_R2_BUCKET_NAME=<your-bucket>`
-    - `FRONTEND_API_BASE_URL=<your-api>` (optional; defaults to code’s built-in URL)
-    - `CLOUDFLARE_ZONE_ID` (optional, for cache purging)
+    - `FRONTEND_API_BASE_URL=<your-api>` (optional; defaults to code's built-in URL)
 - Secrets:
-    - `CLOUDFLARE_API_TOKEN`
-    - `CLOUDFLARE_ACCOUNT_ID`
+    - `CLOUDFLARE_R2_ACCESS_KEY_ID` - R2 API Access Key ID
+    - `CLOUDFLARE_R2_SECRET_ACCESS_KEY` - R2 API Secret Access Key
+    - `CLOUDFLARE_R2_BUCKET_NAME=<your-bucket>`
+    - `CLOUDFLARE_ACCOUNT_ID` - Your Cloudflare Account ID
+    - `CLOUDFLARE_ZONE_ID` (optional, for cache purging)
+    - `CLOUDFLARE_CACHE_API_TOKEN` (optional, separate token for cache purging)
 
 The frontend code defaults to `https://bingus.slimevr.io`. To override, set `FRONTEND_API_BASE_URL`.
 
@@ -38,8 +40,6 @@ Configure these in your repository settings under **Settings > Secrets and varia
 | `ENABLE_FRONTEND_DEPLOYMENT` | No | `false` | Set to `true` to enable Cloudflare deployment |
 | `FRONTEND_API_BASE_URL` | Yes* | - | Base URL for API calls from frontend (overrides code default) |
 | `FRONTEND_CUSTOM_DOMAIN` | No | - | Your custom domain for frontend (optional) |
-| `CLOUDFLARE_R2_BUCKET_NAME` | Yes* | - | R2 bucket name for static hosting |
-| `CLOUDFLARE_ZONE_ID` | No | - | Zone ID for cache purging (optional) |
 
 *Required if Cloudflare deployment is enabled. For GitHub Pages (upstream `frontend.yml`), this is not used.
 
@@ -62,8 +62,12 @@ Configure these in your repository settings under **Settings > Secrets and varia
 ### **Frontend Deployment (Cloudflare R2)**
 | Secret | Required | Description |
 |--------|----------|-------------|
-| `CLOUDFLARE_API_TOKEN` | Yes* | Cloudflare API token with R2 and Zone permissions |
-| `CLOUDFLARE_ACCOUNT_ID` | Yes* | Your Cloudflare account ID |
+| `CLOUDFLARE_R2_ACCESS_KEY_ID` | Yes* | R2 API Access Key ID (S3-compatible credentials) |
+| `CLOUDFLARE_R2_SECRET_ACCESS_KEY` | Yes* | R2 API Secret Access Key (S3-compatible credentials) |
+| `CLOUDFLARE_R2_BUCKET_NAME` | Yes* | R2 bucket name for static hosting |
+| `CLOUDFLARE_ACCOUNT_ID` | Yes* | Your Cloudflare account ID (for R2 endpoint URL) |
+| `CLOUDFLARE_ZONE_ID` | No | Zone ID for cache purging (optional) |
+| `CLOUDFLARE_CACHE_API_TOKEN` | No | Separate API token for cache purging (optional, with minimal permissions) |
 
 *Required if frontend deployment is enabled
 
@@ -90,8 +94,13 @@ ENABLE_FRONTEND_DEPLOYMENT=true
 # FRONTEND_API_BASE_URL overrides the code default (https://bingus.slimevr.io)
 FRONTEND_API_BASE_URL=https://api.example.com
 FRONTEND_CUSTOM_DOMAIN=search.example.com  # optional
-CLOUDFLARE_R2_BUCKET_NAME=my-frontend-bucket
 ENABLE_CONTAINER_BUILDS=true
+
+# In GitHub Secrets (not variables):
+# CLOUDFLARE_R2_ACCESS_KEY_ID=your-r2-access-key-id
+# CLOUDFLARE_R2_SECRET_ACCESS_KEY=your-r2-secret-access-key
+# CLOUDFLARE_R2_BUCKET_NAME=my-frontend-bucket
+# CLOUDFLARE_ACCOUNT_ID=your-account-id
 ENABLE_RELEASES=true
 ENABLE_HELM_PUBLISHING=true
 ```
@@ -115,8 +124,10 @@ This is intentional to prevent:
 
 **Example error messages:**
 ```bash
-❌ CLOUDFLARE_API_TOKEN secret is required
-❌ FRONTEND_API_BASE_URL variable is required (only for Cloudflare deployment)
+❌ CLOUDFLARE_R2_ACCESS_KEY_ID secret is required
+❌ CLOUDFLARE_R2_SECRET_ACCESS_KEY secret is required
+❌ CLOUDFLARE_R2_BUCKET_NAME secret is required
+❌ CLOUDFLARE_ACCOUNT_ID secret is required for R2 endpoint
 ❌ Validation failed: Missing required configuration
 ```
 
@@ -171,19 +182,40 @@ The container builds are now optimized for efficiency:
    R2 Object Storage > Create Bucket > your-frontend-bucket
    ```
 
-2. **Create API Token**:
+2. **Create R2 API Tokens** (S3-compatible credentials):
    ```bash
-   # Permissions needed:
-   - Account:Cloudflare R2:Edit
-   - Zone:Zone:Read (if using cache purging)
-   - Zone:Cache Purge:Edit (if using cache purging)
+   # In Cloudflare dashboard:
+   # R2 Object Storage > Manage R2 API tokens > Create API token
+   #
+   # Permissions needed for R2 token:
+   # - Object Read & Write for your specific bucket
+   #
+   # This gives you:
+   # - Access Key ID (CLOUDFLARE_R2_ACCESS_KEY_ID)
+   # - Secret Access Key (CLOUDFLARE_R2_SECRET_ACCESS_KEY)
    ```
 
-3. **Configure Custom Domain** (Optional):
+3. **Create Cache Purging Token** (Optional, for better security):
+   ```bash
+   # In Cloudflare dashboard:
+   # My Profile > API Tokens > Create Token
+   #
+   # Permissions needed:
+   # - Zone:Zone:Read (for your domain)
+   # - Zone:Cache Purge:Edit (for your domain)
+   ```
+
+4. **Configure Custom Domain** (Optional):
    ```bash
    # In R2 bucket settings
    Settings > Custom Domains > Connect Domain
    ```
+
+5. **Benefits of AWS CLI approach**:
+   - **Separate credentials**: R2-specific API keys vs main Cloudflare account
+   - **Better performance**: `aws s3 sync` with delta uploads and deletions
+   - **Familiar tooling**: Standard S3 commands work with R2
+   - **Granular permissions**: R2 credentials only have R2 access
 
 ## 🔍 **Troubleshooting**
 
@@ -193,9 +225,11 @@ The container builds are now optimized for efficiency:
 - Set `ENABLE_CONTAINER_BUILDS=false` to disable
 
 ### **Frontend Deployment Fails**
-- Verify all Cloudflare secrets are set correctly
-- Check R2 bucket exists and API token has permissions
-- Review build logs for specific errors
+- Verify all R2 secrets are set correctly (`CLOUDFLARE_R2_ACCESS_KEY_ID`, `CLOUDFLARE_R2_SECRET_ACCESS_KEY`, etc.)
+- Check R2 bucket exists and API credentials have read/write permissions
+- Ensure `CLOUDFLARE_ACCOUNT_ID` is correct (used for R2 endpoint URL)
+- Review build logs for AWS CLI or curl errors
+- For cache purging issues, verify `CLOUDFLARE_CACHE_API_TOKEN` has zone permissions
 
 ### **Helm Publishing Fails**
 - Ensure `GITHUB_TOKEN` has packages write permission
