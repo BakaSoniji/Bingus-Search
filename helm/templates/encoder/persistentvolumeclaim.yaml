@@ -1,0 +1,64 @@
+{{- if .Values.encoder.enabled }}
+{{- if .Values.encoder.persistence.embeddingCache.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "bingus.fullname" . }}-encoder-embedding-cache
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "bingus.encoder.labels" . | nindent 4 }}
+    app.kubernetes.io/component: encoder
+    app.kubernetes.io/part-of: storage
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.encoder.persistence.embeddingCache.size }}
+  {{- if .Values.encoder.persistence.embeddingCache.storageClass }}
+  storageClassName: {{ .Values.encoder.persistence.embeddingCache.storageClass }}
+  {{- end }}
+{{- end }}
+---
+{{- if .Values.encoder.persistence.modelCache.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "bingus.fullname" . }}-encoder-model-cache
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "bingus.encoder.labels" . | nindent 4 }}
+    app.kubernetes.io/component: encoder
+    app.kubernetes.io/part-of: storage
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.encoder.persistence.modelCache.size }}
+  {{- if .Values.encoder.persistence.modelCache.storageClass }}
+  storageClassName: {{ .Values.encoder.persistence.modelCache.storageClass }}
+  {{- end }}
+{{- end }}
+---
+{{- if .Values.encoder.persistence.localModels.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "bingus.fullname" . }}-encoder-local-models
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "bingus.encoder.labels" . | nindent 4 }}
+    app.kubernetes.io/component: encoder
+    app.kubernetes.io/part-of: storage
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.encoder.persistence.localModels.size }}
+  {{- if .Values.encoder.persistence.localModels.storageClass }}
+  storageClassName: {{ .Values.encoder.persistence.localModels.storageClass }}
+  {{- end }}
+{{- end }}
+{{- end }}

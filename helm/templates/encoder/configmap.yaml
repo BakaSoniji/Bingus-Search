@@ -1,0 +1,39 @@
+{{- if .Values.encoder.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "bingus.fullname" . }}-encoder-config
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "bingus.encoder.labels" . | nindent 4 }}
+    app.kubernetes.io/component: encoder
+data:
+  # Encoder service configuration
+  PORT: "{{ .Values.encoder.service.targetPort }}"
+  HOST: "0.0.0.0"
+
+  # Model configuration
+  MODEL_NAME: {{ .Values.encoder.config.modelName | quote }}
+  MAX_SEQUENCE_LENGTH: "{{ .Values.encoder.config.maxSequenceLength }}"
+  BATCH_SIZE: "{{ .Values.encoder.config.batchSize }}"
+
+  # Cache configuration
+  EMBEDDING_CACHE_DIR: "/app/cache/embeddings"
+  MODEL_CACHE_DIR: "/app/cache/models"
+  CACHE_TTL: "{{ .Values.encoder.config.cacheTTL }}"
+
+  # Performance tuning
+  WORKERS: "{{ .Values.encoder.config.workers }}"
+  TORCH_NUM_THREADS: "{{ .Values.encoder.resources.limits.cpu | regexReplaceAll "[^0-9]" "" | default "2" }}"
+
+  # Logging
+  LOG_LEVEL: {{ .Values.encoder.config.logLevel | quote }}
+  LOG_FORMAT: "json"
+
+  {{- if .Values.encoder.config.extraEnv }}
+  # Additional environment variables
+  {{- range $key, $value := .Values.encoder.config.extraEnv }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+  {{- end }}
+{{- end }}

@@ -21,3 +21,12 @@
 .idea/
 *.tmproj
 .vscode/
+# OS generated files
+Thumbs.db
+# Helm specific
+*.tgz
+.helmignore
+# CI/CD
+.github/
+# Documentation
+README.md

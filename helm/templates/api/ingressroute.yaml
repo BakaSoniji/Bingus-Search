@@ -1,0 +1,19 @@
+{{- if and .Values.api.enabled .Values.api.ingress.enabled }}
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ include "bingus.fullname" . }}-api
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "bingus.api.labels" . | nindent 4 }}
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: Host(`{{ .Values.api.ingress.hostname }}`)
+      kind: Rule
+      services:
+        - name: {{ include "bingus.fullname" . }}-api
+          port: {{ .Values.api.service.port }}
+      # Middlewares intentionally not managed here to avoid coupling to cluster specifics
+{{- end }}

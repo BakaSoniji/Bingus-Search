@@ -1,0 +1,19 @@
+{{- if .Values.encoder.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "bingus.fullname" . }}-encoder
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "bingus.encoder.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.encoder.service.type }}
+  ports:
+  - port: {{ .Values.encoder.service.port }}
+    targetPort: {{ .Values.encoder.service.targetPort }}
+    protocol: TCP
+    name: http
+  selector:
+    {{- include "bingus.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: encoder
+{{- end }}
