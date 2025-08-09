@@ -16,8 +16,11 @@ CURRENT_BINGUS=$(jq -r 'keys[]' configs/bingus_config.json | sort)
 CURRENT_APPSETTINGS=$(jq -r '.IpRateLimiting | keys[]' configs/appsettings.json | sort)
 
 # Extract what Helm template expects (by parsing the template)
-HELM_BINGUS=$(grep -o '\$defaultBingusConfig\.[a-zA-Z_]*' templates/api/configmap.yaml | sed 's/.*\.//' | sort | uniq)
+HELM_BINGUS=$(grep -o '\$defaultBingusConfig\.[a-zA-Z0-9_]*' templates/api/configmap.yaml | sed 's/.*\.//' | sort | uniq)
 HELM_APPSETTINGS=$(grep -o '\$defaultAppSettings\.IpRateLimiting\.[a-zA-Z_]*' templates/api/configmap.yaml | sed 's/.*\.//' | sort | uniq)
+
+# Add hardcoded fields that don't need to reference defaults
+HELM_APPSETTINGS_WITH_HARDCODED=$(echo -e "$HELM_APPSETTINGS\nStackBlockedRequests\nRealIpHeader\nClientIdHeader\nHttpStatusCode" | sort | uniq)
 
 # Check for missing fields in Helm template
 echo "📋 Checking bingus_config.json schema..."
@@ -31,7 +34,7 @@ if [[ -n "$MISSING_BINGUS" ]]; then
 fi
 
 echo "📋 Checking appsettings.json schema..."
-MISSING_APPSETTINGS=$(comm -23 <(echo "$CURRENT_APPSETTINGS") <(echo "$HELM_APPSETTINGS"))
+MISSING_APPSETTINGS=$(comm -23 <(echo "$CURRENT_APPSETTINGS") <(echo "$HELM_APPSETTINGS_WITH_HARDCODED"))
 if [[ -n "$MISSING_APPSETTINGS" ]]; then
     echo "⚠️  New fields in appsettings.json not handled by Helm:"
     echo "$MISSING_APPSETTINGS"

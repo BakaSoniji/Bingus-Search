@@ -35,13 +35,14 @@ data:
     {{- $_ := set $appSettings "Logging" (dict "LogLevel" (dict "Default" (.Values.api.config.logLevel | default $defaultAppSettings.Logging.LogLevel.Default) "Microsoft.AspNetCore" "Warning")) }}
     {{- $_ := set $appSettings "AllowedHosts" "*" }}
     {{- $rateLimiting := dict }}
-    {{- $_ := set $rateLimiting "EnableEndpointRateLimiting" (.Values.api.config.rateLimiting.enabled | default $defaultAppSettings.IpRateLimiting.EnableEndpointRateLimiting) }}
+    {{- $rateLimitingConfig := .Values.api.config.rateLimiting | default dict }}
+    {{- $_ := set $rateLimiting "EnableEndpointRateLimiting" ($rateLimitingConfig.enabled | default $defaultAppSettings.IpRateLimiting.EnableEndpointRateLimiting) }}
     {{- $_ := set $rateLimiting "StackBlockedRequests" false }}
     {{- $_ := set $rateLimiting "RealIpHeader" "X-Forwarded-For" }}
     {{- $_ := set $rateLimiting "ClientIdHeader" "X-ClientId" }}
     {{- $_ := set $rateLimiting "HttpStatusCode" 429 }}
-    {{- $_ := set $rateLimiting "IpWhitelist" (.Values.api.config.rateLimiting.ipWhitelist | default $defaultAppSettings.IpRateLimiting.IpWhitelist) }}
-    {{- $_ := set $rateLimiting "GeneralRules" (.Values.api.config.rateLimiting.generalRules | default $defaultAppSettings.IpRateLimiting.GeneralRules) }}
+    {{- $_ := set $rateLimiting "IpWhitelist" ($rateLimitingConfig.ipWhitelist | default $defaultAppSettings.IpRateLimiting.IpWhitelist) }}
+    {{- $_ := set $rateLimiting "GeneralRules" ($rateLimitingConfig.generalRules | default $defaultAppSettings.IpRateLimiting.GeneralRules) }}
     {{- $_ := set $appSettings "IpRateLimiting" $rateLimiting }}
     {{- $appSettings | toJson | nindent 4 }}
 
