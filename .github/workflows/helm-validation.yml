@@ -1,0 +1,77 @@
+name: Helm Configuration Validation
+
+on:
+  push:
+    paths:
+      - 'BingusApi/config/**'
+      - 'helm/**'
+  pull_request:
+    paths:
+      - 'BingusApi/config/**'
+      - 'helm/**'
+  # Run on any workflow that might be affected
+  workflow_call:
+
+jobs:
+  validate-config-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: 'latest'
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Make scripts executable
+        run: |
+          chmod +x helm/validate-config.sh
+          chmod +x helm/check-config-drift.sh
+          chmod +x helm/copy-configs.sh
+
+      - name: Copy configs into chart
+        run: |
+          cd helm
+          ./copy-configs.sh
+
+      - name: Validate JSON syntax
+        run: |
+          for file in BingusApi/config/*.json; do
+            echo "Validating $file"
+            jq . "$file" > /dev/null
+          done
+
+      - name: Check config schema drift
+        run: |
+          cd helm
+          ./check-config-drift.sh
+
+      - name: Validate Helm templates
+        run: |
+          cd helm
+          ./validate-config.sh
+
+      - name: Test different value combinations
+        run: |
+          cd helm
+          # Test with minimal overrides
+          helm template . --values values.yaml > /dev/null
+
+          # Test with all values commented out (pure defaults)
+          helm template . --set api.config.bingus.apiUri="http://test:5000" > /dev/null
+
+          echo "✅ All template variations render successfully"
+
+      - name: Generate config preview
+        run: |
+          cd helm
+          echo "## Generated Configuration Preview" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### appsettings.json" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          helm template . --values values.yaml | grep -A 20 "appsettings.json:" | grep -A 20 "|" | head -15 >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY

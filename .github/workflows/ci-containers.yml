@@ -15,8 +15,61 @@ env:
   SHOULD_PUSH: ${{ github.ref == 'refs/heads/main' || github.event_name == 'release' || startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
+  validate-config:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Make scripts executable
+        run: |
+          chmod +x helm/validate-config.sh
+          chmod +x helm/check-config-drift.sh
+          chmod +x helm/copy-configs.sh
+
+      - name: Copy configs into chart
+        run: |
+          cd helm
+          ./copy-configs.sh
+
+      - name: Validate configuration sync
+        run: |
+          cd helm
+          echo "🔍 Validating Helm configuration sync before container builds..."
+
+          # Check for schema drift
+          if ! ./check-config-drift.sh; then
+            echo ""
+            echo "❌ Configuration schema drift detected!"
+            echo ""
+            echo "🔧 To fix this issue:"
+            echo "   1. Run: cd helm && ./check-config-drift.sh"
+            echo "   2. Update helm/templates/api/configmap.yaml with missing fields"
+            echo "   3. Test: ./validate-config.sh"
+            echo "   4. Commit and push changes"
+            echo ""
+            echo "Container builds will be skipped until this is resolved."
+            exit 1
+          fi
+
+          # Validate templates render
+          if ! ./validate-config.sh; then
+            echo ""
+            echo "❌ Helm template validation failed!"
+            echo ""
+            echo "🔧 To debug:"
+            echo "   1. Run: cd helm && ./validate-config.sh"
+            echo "   2. Check template syntax and JSON validity"
+            echo "   3. Test with: helm template . --values values.yaml"
+            echo ""
+            exit 1
+          fi
+
+          echo "✅ Configuration validation passed! Proceeding with container builds."
+
   check-skip:
     runs-on: ubuntu-latest
+    needs: [validate-config]
     steps:
       - name: Docs-only changes detected
         if: github.event_name == 'push'
@@ -26,6 +79,7 @@ jobs:
 
   detect-changes:
     runs-on: ubuntu-latest
+    needs: [validate-config]
     outputs:
       encoder: ${{ steps.changes.outputs.encoder }}
       api: ${{ steps.changes.outputs.api }}
@@ -206,7 +260,7 @@ jobs:
               ;;
           esac
 
-  build-images:
+  build-images-amd64:
     runs-on: ubuntu-latest
     needs: [detect-changes, lint, test-services]
     if: always() && (needs.lint.result == 'success') && (needs.test-services.result == 'success' || needs.test-services.result == 'skipped') && vars.ENABLE_CONTAINER_BUILDS == 'true'
@@ -215,8 +269,40 @@ jobs:
       matrix:
         service: [encoder, api, bot]
 
+    outputs:
+      encoder-changed: ${{ steps.check-encoder.outputs.changed }}
+      api-changed: ${{ steps.check-api.outputs.changed }}
+      bot-changed: ${{ steps.check-bot.outputs.changed }}
+
     steps:
       - uses: actions/checkout@v4
+
+      - name: Check if encoder service changed
+        id: check-encoder
+        run: |
+          if [[ "${{ matrix.service }}" == "encoder" && "${{ needs.detect-changes.outputs.encoder }}" == "true" ]]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check if api service changed
+        id: check-api
+        run: |
+          if [[ "${{ matrix.service }}" == "api" && "${{ needs.detect-changes.outputs.api }}" == "true" ]]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check if bot service changed
+        id: check-bot
+        run: |
+          if [[ "${{ matrix.service }}" == "bot" && "${{ needs.detect-changes.outputs.bot }}" == "true" ]]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Check if service changed
         id: check
@@ -234,7 +320,7 @@ jobs:
       - name: Build strategy info
         if: steps.check.outputs.changed == 'true'
         run: |
-          echo "🔨 Building ${{ matrix.service }} container..."
+          echo "🔨 Building ${{ matrix.service }} container for AMD64..."
           if [[ "${{ env.SHOULD_PUSH }}" == "true" ]]; then
             echo "📦 Will push to registry (main branch or release)"
           else
@@ -267,25 +353,182 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ steps.repo.outputs.name }}/${{ matrix.service }}
           tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=sha,prefix={{branch}}-
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=branch,suffix=-amd64
+            type=ref,event=pr,suffix=-amd64
+            type=sha,prefix={{branch}}-,suffix=-amd64
+            type=raw,value=latest-amd64,enable={{is_default_branch}}
 
-      - name: Build and push Docker image
+      - name: Build and push Docker image (AMD64)
         if: steps.check.outputs.changed == 'true'
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ${{ matrix.service == 'encoder' && 'bingus-python-encoder/Dockerfile' || (matrix.service == 'api' && 'api.Dockerfile' || 'bot.Dockerfile') }}
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: ${{ env.SHOULD_PUSH == 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: |
+            type=gha,scope=amd64-${{ matrix.service }}
+            type=registry,ref=${{ env.REGISTRY }}/${{ steps.repo.outputs.name }}/${{ matrix.service }}:buildcache-amd64
+          cache-to: |
+            type=gha,mode=max,scope=amd64-${{ matrix.service }}
+            type=registry,ref=${{ env.REGISTRY }}/${{ steps.repo.outputs.name }}/${{ matrix.service }}:buildcache-amd64,mode=max
 
+  build-images-arm64:
+    runs-on: ubuntu-24.04-arm64
+    needs: [detect-changes, lint, test-services]
+    if: always() && (needs.lint.result == 'success') && (needs.test-services.result == 'success' || needs.test-services.result == 'skipped') && vars.ENABLE_CONTAINER_BUILDS == 'true'
 
+    strategy:
+      matrix:
+        service: [encoder, api, bot]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check if service changed
+        id: check
+        run: |
+          if [[ "${{ matrix.service }}" == "encoder" && "${{ needs.detect-changes.outputs.encoder }}" == "true" ]]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          elif [[ "${{ matrix.service }}" == "api" && "${{ needs.detect-changes.outputs.api }}" == "true" ]]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          elif [[ "${{ matrix.service }}" == "bot" && "${{ needs.detect-changes.outputs.bot }}" == "true" ]]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build strategy info
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          echo "🔨 Building ${{ matrix.service }} container for ARM64..."
+          if [[ "${{ env.SHOULD_PUSH }}" == "true" ]]; then
+            echo "📦 Will push to registry (main branch or release)"
+          else
+            echo "🏗️ Build-only mode (feature branch - no registry push)"
+          fi
+
+      - name: Set up Docker Buildx
+        if: steps.check.outputs.changed == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        if: steps.check.outputs.changed == 'true' && env.SHOULD_PUSH == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true  # Allow forks without registry access to still run other checks
+
+      - name: Normalize repository name
+        if: steps.check.outputs.changed == 'true'
+        id: repo
+        run: |
+          echo "name=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
+      - name: Extract metadata
+        if: steps.check.outputs.changed == 'true'
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ steps.repo.outputs.name }}/${{ matrix.service }}
+          tags: |
+            type=ref,event=branch,suffix=-arm64
+            type=ref,event=pr,suffix=-arm64
+            type=sha,prefix={{branch}}-,suffix=-arm64
+            type=raw,value=latest-arm64,enable={{is_default_branch}}
+
+      - name: Build and push Docker image (ARM64)
+        if: steps.check.outputs.changed == 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ${{ matrix.service == 'encoder' && 'bingus-python-encoder/Dockerfile' || (matrix.service == 'api' && 'api.Dockerfile' || 'bot.Dockerfile') }}
+          platforms: linux/arm64
+          push: ${{ env.SHOULD_PUSH == 'true' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: |
+            type=gha,scope=arm64-${{ matrix.service }}
+            type=registry,ref=${{ env.REGISTRY }}/${{ steps.repo.outputs.name }}/${{ matrix.service }}:buildcache-arm64
+          cache-to: |
+            type=gha,mode=max,scope=arm64-${{ matrix.service }}
+            type=registry,ref=${{ env.REGISTRY }}/${{ steps.repo.outputs.name }}/${{ matrix.service }}:buildcache-arm64,mode=max
+
+  create-manifest:
+    runs-on: ubuntu-latest
+    needs: [detect-changes, build-images-amd64, build-images-arm64]
+    if: always() && (needs.build-images-amd64.result == 'success' || needs.build-images-amd64.result == 'skipped') && (needs.build-images-arm64.result == 'success' || needs.build-images-arm64.result == 'skipped') && env.SHOULD_PUSH == 'true'
+
+    strategy:
+      matrix:
+        service: [encoder, api, bot]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check if service changed
+        id: check
+        run: |
+          if [[ "${{ matrix.service }}" == "encoder" && "${{ needs.detect-changes.outputs.encoder }}" == "true" ]]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          elif [[ "${{ matrix.service }}" == "api" && "${{ needs.detect-changes.outputs.api }}" == "true" ]]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          elif [[ "${{ matrix.service }}" == "bot" && "${{ needs.detect-changes.outputs.bot }}" == "true" ]]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Log in to Container Registry
+        if: steps.check.outputs.changed == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Normalize repository name
+        if: steps.check.outputs.changed == 'true'
+        id: repo
+        run: |
+          echo "name=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
+      - name: Extract metadata for manifest
+        if: steps.check.outputs.changed == 'true'
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ steps.repo.outputs.name }}/${{ matrix.service }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Create and push multi-arch manifest
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          REPO_LOWER="${{ steps.repo.outputs.name }}"
+          SERVICE="${{ matrix.service }}"
+
+          # Extract the tag names from metadata (without architecture suffixes)
+          TAGS=$(echo '${{ steps.meta.outputs.tags }}' | tr '\n' ' ')
+
+          for TAG in $TAGS; do
+            echo "🔗 Creating manifest for: $TAG"
+
+            # Create manifest referencing the architecture-specific images
+            docker buildx imagetools create \
+              --tag "$TAG" \
+              "${TAG}-amd64" \
+              "${TAG}-arm64"
+
+            echo "✅ Multi-arch manifest created: $TAG"
+          done
 
   helm-lint:
     runs-on: ubuntu-latest
@@ -313,8 +556,8 @@ jobs:
 
   integration-test:
     runs-on: ubuntu-latest
-    needs: [build-images, helm-lint]
-    if: always() && (needs.build-images.result == 'success' || needs.build-images.result == 'skipped') && (needs.helm-lint.result == 'success' || needs.helm-lint.result == 'skipped')
+    needs: [create-manifest, helm-lint]
+    if: always() && (needs.create-manifest.result == 'success' || needs.create-manifest.result == 'skipped') && (needs.helm-lint.result == 'success' || needs.helm-lint.result == 'skipped')
 
     steps:
       - uses: actions/checkout@v4
@@ -341,8 +584,8 @@ jobs:
 
   notify-success:
     runs-on: ubuntu-latest
-    needs: [lint, test-services, build-images, helm-lint, integration-test]
-    if: always() && (needs.lint.result == 'success') && (needs.build-images.result == 'success' || needs.build-images.result == 'skipped')
+    needs: [lint, test-services, create-manifest, helm-lint, integration-test]
+    if: always() && (needs.lint.result == 'success') && (needs.create-manifest.result == 'success' || needs.create-manifest.result == 'skipped')
 
     steps:
       - name: Notify success

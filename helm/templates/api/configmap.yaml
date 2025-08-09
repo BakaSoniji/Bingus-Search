@@ -24,37 +24,34 @@ data:
   {{- end }}
   {{- end }}
 
-  # JSON Configuration Files
+  # JSON Configuration Files with smart defaults
+  # Falls back to actual config files when Helm values are not specified
+
+  {{- $defaultAppSettings := .Files.Get "configs/appsettings.json" | fromJson }}
+  {{- $defaultBingusConfig := .Files.Get "configs/bingus_config.json" | fromJson }}
+
   appsettings.json: |
-    {
-      "Logging": {
-        "LogLevel": {
-          "Default": {{ .Values.api.config.logLevel | quote }},
-          "Microsoft.AspNetCore": "Warning"
-        }
-      },
-      "AllowedHosts": "*",
-      "IpRateLimiting": {
-        "EnableEndpointRateLimiting": {{ .Values.api.config.rateLimiting.enabled }},
-        "StackBlockedRequests": false,
-        "RealIpHeader": "X-Forwarded-For",
-        "ClientIdHeader": "X-ClientId",
-        "HttpStatusCode": 429,
-        "IpWhitelist": {{ .Values.api.config.rateLimiting.ipWhitelist | toJson }},
-        "GeneralRules": {{ .Values.api.config.rateLimiting.generalRules | toJson }}
-      }
-    }
+    {{- $appSettings := dict }}
+    {{- $_ := set $appSettings "Logging" (dict "LogLevel" (dict "Default" (.Values.api.config.logLevel | default $defaultAppSettings.Logging.LogLevel.Default) "Microsoft.AspNetCore" "Warning")) }}
+    {{- $_ := set $appSettings "AllowedHosts" "*" }}
+    {{- $rateLimiting := dict }}
+    {{- $_ := set $rateLimiting "EnableEndpointRateLimiting" (.Values.api.config.rateLimiting.enabled | default $defaultAppSettings.IpRateLimiting.EnableEndpointRateLimiting) }}
+    {{- $_ := set $rateLimiting "StackBlockedRequests" false }}
+    {{- $_ := set $rateLimiting "RealIpHeader" "X-Forwarded-For" }}
+    {{- $_ := set $rateLimiting "ClientIdHeader" "X-ClientId" }}
+    {{- $_ := set $rateLimiting "HttpStatusCode" 429 }}
+    {{- $_ := set $rateLimiting "IpWhitelist" (.Values.api.config.rateLimiting.ipWhitelist | default $defaultAppSettings.IpRateLimiting.IpWhitelist) }}
+    {{- $_ := set $rateLimiting "GeneralRules" (.Values.api.config.rateLimiting.generalRules | default $defaultAppSettings.IpRateLimiting.GeneralRules) }}
+    {{- $_ := set $appSettings "IpRateLimiting" $rateLimiting }}
+    {{- $appSettings | toJson | nindent 4 }}
 
   bingus_config.json: |
-    {
-      "encoder_type": {{ .Values.api.config.bingus.encoderType | quote }},
-      "use_model_path": {{ .Values.api.config.bingus.useModelPath | quote }},
-      "api_uri": {{ .Values.api.config.bingus.apiUri | quote }},
-      "llama_model_path": {{ .Values.api.config.bingus.llamaModelPath | quote }},
-      "hnsw_seed": {{ .Values.api.config.bingus.hnswSeed }},
-      "use_q2a": {{ .Values.api.config.bingus.useQ2a }}
-    }
-
-  faq_config.json: |
-    {{- .Values.api.config.faq | toJson | nindent 4 }}
+    {{- $bingusConfig := dict }}
+    {{- $_ := set $bingusConfig "encoder_type" (.Values.api.config.bingus.encoderType | default $defaultBingusConfig.encoder_type) }}
+    {{- $_ := set $bingusConfig "use_model_path" (.Values.api.config.bingus.useModelPath | default $defaultBingusConfig.use_model_path) }}
+    {{- $_ := set $bingusConfig "api_uri" (.Values.api.config.bingus.apiUri | default $defaultBingusConfig.api_uri) }}
+    {{- $_ := set $bingusConfig "llama_model_path" (.Values.api.config.bingus.llamaModelPath | default $defaultBingusConfig.llama_model_path) }}
+    {{- $_ := set $bingusConfig "hnsw_seed" (.Values.api.config.bingus.hnswSeed | default $defaultBingusConfig.hnsw_seed) }}
+    {{- $_ := set $bingusConfig "use_q2a" (.Values.api.config.bingus.useQ2a | default $defaultBingusConfig.use_q2a) }}
+    {{- $bingusConfig | toJson | nindent 4 }}
 {{- end }}

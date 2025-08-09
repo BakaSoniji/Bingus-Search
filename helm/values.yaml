@@ -101,6 +101,9 @@ api:
     storageClass: ""
     subPath: ""
 
+  # Temporarily disable security context for config compatibility
+  disableSecurityContext: true
+
   config:
     aspnetcoreEnvironment: "Production"
     aspnetcoreUrls: "http://+:8080"
@@ -108,56 +111,24 @@ api:
     logLevel: "Information"
     extraEnv: {}
 
-    # Bingus configuration (for bingus_config.json)
+    # Configuration overrides (optional)
+    # When not specified, values fall back to ../BingusApi/config/*.json files
+    # This keeps the schema automatically in sync with upstream changes
+
+    # Bingus configuration overrides (for bingus_config.json)
     bingus:
-      encoderType: "llama"
-      useModelPath: "models/onnx/use_l_v5.onnx"
-      apiUri: "http://bingus-encoder:5000"
-      llamaModelPath: "models/Bingus-q2a-v14.gguf"
-      hnswSeed: 42
-      useQ2a: true
+      # encoderType: "llama"                    # Uncomment to override
+      # useModelPath: "models/onnx/use_l_v5.onnx"
+      apiUri: "http://bingus-encoder:5000"      # Override for Kubernetes service name
+      # llamaModelPath: "models/Bingus-q2a-v14.gguf"
+      # hnswSeed: 42
+      # useQ2a: true
 
-    # FAQ configuration (for faq_config.json) - defaults to empty, can be overridden
-    faq:
-      faqs: []
-
-    # Rate limiting configuration (for appsettings.json)
+    # Rate limiting configuration overrides (for appsettings.json)
     rateLimiting:
-      enabled: true
-      ipWhitelist:
-        - "127.0.0.1"
-        - "::1/10"
-        - "10.0.0.0/8"
-        - "172.16.0.0/12"
-        - "192.168.0.0/16"
-      generalRules:
-        - endpoint: "post:*"
-          period: "1m"
-          limit: 60
-        - endpoint: "post:*"
-          period: "1s"
-          limit: 5
-        - endpoint: "put:*"
-          period: "1m"
-          limit: 60
-        - endpoint: "put:*"
-          period: "1s"
-          limit: 5
-        - endpoint: "delete:*"
-          period: "1m"
-          limit: 60
-        - endpoint: "delete:*"
-          period: "1s"
-          limit: 5
-        - endpoint: "get:*"
-          period: "1m"
-          limit: 200
-        - endpoint: "get:/Faq/Search"
-          period: "10s"
-          limit: 3
-        - endpoint: "get:/Faq/Config"
-          period: "5s"
-          limit: 1
+      # enabled: true                           # Uncomment to override
+      # ipWhitelist: [...]                      # Defaults from appsettings.json
+      # generalRules: [...]                     # Defaults from appsettings.json
 
   secrets:
     # .NET API doesn't need database URL - uses in-memory or config

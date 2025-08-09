@@ -19,8 +19,60 @@ env:
   CUSTOM_REGISTRY: ${{ vars.CUSTOM_REGISTRY || '' }}  # Optional custom registry override
 
 jobs:
+  validate-config:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Make scripts executable
+        run: |
+          chmod +x helm/validate-config.sh
+          chmod +x helm/check-config-drift.sh
+          chmod +x helm/copy-configs.sh
+
+      - name: Copy configs into chart
+        run: |
+          cd helm
+          ./copy-configs.sh
+
+      - name: Validate configuration sync
+        run: |
+          cd helm
+          echo "🔍 Validating Helm configuration sync..."
+
+          # Check for schema drift
+          if ! ./check-config-drift.sh; then
+            echo ""
+            echo "❌ Configuration schema drift detected!"
+            echo ""
+            echo "🔧 To fix this issue:"
+            echo "   1. Run: cd helm && ./check-config-drift.sh"
+            echo "   2. Update helm/templates/api/configmap.yaml with missing fields"
+            echo "   3. Test: ./validate-config.sh"
+            echo "   4. Commit and push changes"
+            echo ""
+            exit 1
+          fi
+
+          # Validate templates render
+          if ! ./validate-config.sh; then
+            echo ""
+            echo "❌ Helm template validation failed!"
+            echo ""
+            echo "🔧 To debug:"
+            echo "   1. Run: cd helm && ./validate-config.sh"
+            echo "   2. Check template syntax and JSON validity"
+            echo "   3. Test with: helm template . --values values.yaml"
+            echo ""
+            exit 1
+          fi
+
+          echo "✅ Configuration validation passed!"
+
   validate-release:
     runs-on: ubuntu-latest
+    needs: [validate-config]
     outputs:
       version: ${{ steps.version.outputs.version }}
 
@@ -50,7 +102,7 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "📦 Release version: $VERSION"
 
-  build-release-images:
+  build-release-images-amd64:
     runs-on: ubuntu-latest
     needs: validate-release
 
@@ -82,20 +134,120 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ steps.repo.outputs.name }}/${{ matrix.service }}
           tags: |
-            type=raw,value=${{ needs.validate-release.outputs.version }}
-            type=raw,value=latest
+            type=raw,value=${{ needs.validate-release.outputs.version }}-amd64
+            type=raw,value=latest-amd64
 
-      - name: Build and push Docker image
+      - name: Build and push Docker image (AMD64)
         uses: docker/build-push-action@v5
         with:
           context: ${{ matrix.service == 'encoder' && 'bingus-python-encoder' || '.' }}
           file: ${{ matrix.service == 'encoder' && 'bingus-python-encoder/Dockerfile' || (matrix.service == 'api' && 'api.Dockerfile' || 'bot.Dockerfile') }}
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: |
+            type=gha,scope=amd64-${{ matrix.service }}
+            type=registry,ref=${{ env.REGISTRY }}/${{ steps.repo.outputs.name }}/${{ matrix.service }}:buildcache-amd64
+          cache-to: |
+            type=gha,mode=max,scope=amd64-${{ matrix.service }}
+            type=registry,ref=${{ env.REGISTRY }}/${{ steps.repo.outputs.name }}/${{ matrix.service }}:buildcache-amd64,mode=max
+
+  build-release-images-arm64:
+    runs-on: ubuntu-24.04-arm64
+    needs: validate-release
+
+    strategy:
+      matrix:
+        service: [encoder, api, bot]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Normalize repository name
+        id: repo
+        run: |
+          echo "name=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ steps.repo.outputs.name }}/${{ matrix.service }}
+          tags: |
+            type=raw,value=${{ needs.validate-release.outputs.version }}-arm64
+            type=raw,value=latest-arm64
+
+      - name: Build and push Docker image (ARM64)
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.service == 'encoder' && 'bingus-python-encoder' || '.' }}
+          file: ${{ matrix.service == 'encoder' && 'bingus-python-encoder/Dockerfile' || (matrix.service == 'api' && 'api.Dockerfile' || 'bot.Dockerfile') }}
+          platforms: linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: |
+            type=gha,scope=arm64-${{ matrix.service }}
+            type=registry,ref=${{ env.REGISTRY }}/${{ steps.repo.outputs.name }}/${{ matrix.service }}:buildcache-arm64
+          cache-to: |
+            type=gha,mode=max,scope=arm64-${{ matrix.service }}
+            type=registry,ref=${{ env.REGISTRY }}/${{ steps.repo.outputs.name }}/${{ matrix.service }}:buildcache-arm64,mode=max
+
+  create-release-manifest:
+    runs-on: ubuntu-latest
+    needs: [validate-release, build-release-images-amd64, build-release-images-arm64]
+
+    strategy:
+      matrix:
+        service: [encoder, api, bot]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Normalize repository name
+        id: repo
+        run: |
+          echo "name=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
+      - name: Create and push release manifest
+        run: |
+          REPO_LOWER="${{ steps.repo.outputs.name }}"
+          SERVICE="${{ matrix.service }}"
+          VERSION="${{ needs.validate-release.outputs.version }}"
+
+          echo "🔗 Creating release manifest for: $SERVICE"
+
+          # Create versioned manifest
+          docker buildx imagetools create \
+            --tag "${{ env.REGISTRY }}/${REPO_LOWER}/${SERVICE}:${VERSION}" \
+            "${{ env.REGISTRY }}/${REPO_LOWER}/${SERVICE}:${VERSION}-amd64" \
+            "${{ env.REGISTRY }}/${REPO_LOWER}/${SERVICE}:${VERSION}-arm64"
+
+          # Create latest manifest
+          docker buildx imagetools create \
+            --tag "${{ env.REGISTRY }}/${REPO_LOWER}/${SERVICE}:latest" \
+            "${{ env.REGISTRY }}/${REPO_LOWER}/${SERVICE}:latest-amd64" \
+            "${{ env.REGISTRY }}/${REPO_LOWER}/${SERVICE}:latest-arm64"
+
+          echo "✅ Multi-arch manifests created for $SERVICE"
 
       # Cosign removed for simplicity (low traffic project)
 
@@ -144,7 +296,7 @@ jobs:
 
   create-release:
     runs-on: ubuntu-latest
-    needs: [validate-release, build-release-images, package-helm-chart]
+    needs: [validate-release, create-release-manifest, package-helm-chart]
 
     steps:
       - uses: actions/checkout@v4

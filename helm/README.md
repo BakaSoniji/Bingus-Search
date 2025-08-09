@@ -1,289 +1,137 @@
-# Bingus Helm Chart
+# Bingus-Search Helm Chart
 
-A comprehensive Helm chart for deploying the Bingus search application on Kubernetes.
-
-## Overview
-
-Bingus is a multi-service search application consisting of:
-- **Encoder Service**: Handles text embedding and vector operations
-- **API Service**: Provides REST API for search functionality
-- **Bot Service**: Discord bot integration for interactive search
-
-## Prerequisites
-
-- Kubernetes 1.20+
-- Helm 3.8+
-- Traefik ingress controller (for web access)
-- Persistent storage support (for caches and data)
-
-## Installation
-
-### Quick Start
+## Quick Start
 
 ```bash
-# Add the repository (when published)
-helm repo add bingus oci://ghcr.io/bakasoniji/bingus-search/helm
+# Deploy with defaults
+helm install bingus-search . --values values.yaml
 
-# Install with default values
-helm install bingus bingus/bingus --create-namespace --namespace bingus
+# Override specific configs
+helm install bingus-search . --values values.yaml \
+  --set api.config.logLevel="Debug" \
+  --set api.config.bingus.encoderType="custom"
 ```
 
-### From Source
+## Configuration Validation
+
+This chart uses [config sync](./CONFIG-SYNC.md) that automatically sync with upstream config files.
+
+### Before Making Changes
+
+**Always run validation before committing:**
 
 ```bash
-# Clone the repository
-git clone https://github.com/BakaSoniji/Bingus-Search.git
-cd Bingus-Search
-
-# Install the chart
-helm install bingus ./helm --create-namespace --namespace bingus
+cd helm
+./copy-configs.sh      # Copy source configs into chart
+./validate-config.sh   # Validate everything works
 ```
 
-### Custom Installation
+### If Validation Fails
 
+**Schema drift detected?**
 ```bash
-# Install with custom values
-helm install bingus ./helm \
-  --create-namespace \
-  --namespace bingus \
-  --set api.ingress.hostname=search.yourdomain.com \
-  --set encoder.resources.limits.memory=8Gi \
-  --set bot.secrets.discordToken=your-discord-token
+# 1. Check what's missing
+./check-config-drift.sh
+
+# 2. Update templates manually
+# Edit: templates/api/configmap.yaml
+
+# 3. Test the fix
+./validate-config.sh
+
+# 4. Commit and push
 ```
 
-## Configuration
+**Template errors?**
+```bash
+# Debug template rendering
+helm template . --values values.yaml --debug
 
-### Global Settings
+# Check JSON syntax
+jq . ../BingusApi/config/appsettings.json
+jq . ../BingusApi/config/bingus_config.json
+```
 
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `global.namespace` | Target namespace | `bingus` |
-| `global.createNamespace` | Create namespace if it doesn't exist | `true` |
-| `global.registry` | Container registry prefix | `""` (unset) |
+## How Smart Defaults Work
 
-### Encoder Service
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `encoder.enabled` | Enable encoder service | `true` |
-| `encoder.replicaCount` | Number of replicas | `1` |
-| `encoder.image.tag` | Image tag | `latest` |
-| `encoder.resources.limits.memory` | Memory limit | `4Gi` |
-| `encoder.resources.limits.cpu` | CPU limit | `2000m` |
-| `encoder.persistence.modelCache.size` | Model cache storage size | `10Gi` |
-| `encoder.persistence.embeddingCache.size` | Embedding cache size | `5Gi` |
-| `encoder.config.modelName` | Sentence transformer model | `sentence-transformers/all-MiniLM-L6-v2` |
-
-### API Service
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `api.enabled` | Enable API service | `true` |
-| `api.replicaCount` | Number of replicas | `1` |
-| `api.image.tag` | Image tag | `latest` |
-| `api.service.port` | Service port | `8080` |
-| `api.ingress.enabled` | Enable ingress | `true` |
-| `api.ingress.hostname` | Ingress hostname | `bingus.bakas.io` |
-| `api.ingress.accessPolicy` | Access policy (public/private) | `public` |
-| `api.persistence.size` | Data storage size | `2Gi` |
-
-### Bot Service
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `bot.enabled` | Enable bot service | `true` |
-| `bot.replicaCount` | Number of replicas | `1` |
-| `bot.image.tag` | Image tag | `latest` |
-| `bot.secrets.discordToken` | Discord bot token | `""` |
-| `bot.secrets.discordClientId` | Discord application/client ID | `""` |
-| `bot.secrets.discordForums` | JSON array of forum IDs to monitor | `""` |
-| `bot.secrets.extraSecrets` | Additional secret key/values | `{}` |
-| `bot.config.nodeEnv` | Node.js environment | `production` |
-| `bot.config.apiUrl` | API service URL | `http://bingus-api:8080` |
-
-### Security Context
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `securityContext.runAsUser` | User ID | `1001` |
-| `securityContext.runAsGroup` | Group ID | `1001` |
-| `securityContext.fsGroup` | Filesystem group | `1001` |
-| `containerSecurityContext.allowPrivilegeEscalation` | Allow privilege escalation | `false` |
-
-## Examples
-
-### Production Configuration
-
+### 🎯 **Override Only What You Need**
 ```yaml
-# values-prod.yaml
-global:
-  # Optional registry prefix (leave empty to use image names without prefix)
-  registry: ghcr.io/youruser/bingus-search
-
-encoder:
-  replicaCount: 2
-  resources:
-    limits:
-      memory: 8Gi
-      cpu: 4000m
-  persistence:
-    modelCache:
-      size: 50Gi
-      storageClass: fast-ssd
-    embeddingCache:
-      size: 20Gi
-      storageClass: fast-ssd
-
+# values.yaml (minimal example)
 api:
-  replicaCount: 3
-  ingress:
-    hostname: search.yourcompany.com
-    accessPolicy: private  # Requires Cloudflare Access
-  persistence:
-    size: 10Gi
-    storageClass: standard
-  secrets:
-    databaseUrl: postgresql://user:pass@postgres:5432/bingus
-
-bot:
-  secrets:
-    discordToken: "your-production-bot-token"
   config:
-    discordGuildId: "your-guild-id"
+    bingus:
+      apiUri: "http://bingus-encoder:5000"  # K8s service name
+      # All other values use defaults from ../BingusApi/config/bingus_config.json
 ```
 
-### Development Configuration
+### 📁 **Files Overview**
+```
+BingusApi/config/
+├── appsettings.json      # ✅ Source of truth (.NET config)
+├── bingus_config.json    # ✅ Source of truth (Bingus config)
+└── faq_config.json       # ❌ Application data (not in Helm)
+
+helm/
+├── values.yaml           # Optional overrides only
+├── copy-configs.sh       # Copy source configs into chart
+├── validate-config.sh    # Validation script
+├── check-config-drift.sh # Schema drift detection
+├── configs/              # Auto-generated (gitignored)
+│   ├── appsettings.json  # ← Copied from source
+│   └── bingus_config.json # ← Copied from source
+└── templates/api/
+    └── configmap.yaml    # Smart merge logic
+```
+
+## CI Integration
+
+All workflows validate config sync **before** building:
 
 ```yaml
-# values-dev.yaml
-encoder:
-  resources:
-    limits:
-      memory: 2Gi
-      cpu: 1000m
-  persistence:
-    modelCache:
-      size: 5Gi
-    embeddingCache:
-      size: 2Gi
-
-api:
-  ingress:
-    hostname: bingus-dev.bakas.io
-  persistence:
-    size: 1Gi
-
-bot:
-  secrets:
-    discordToken: "your-dev-bot-token"
-    discordClientId: "your-app-id"
-    discordForums: '["123456789012345678"]'
+# Automatic validation in CI
+- validate-config     # ← Runs first
+- build-containers    # ← Only if validation passes
+- create-release      # ← Only if validation passes
 ```
 
-## Deployment Approaches
-
-### Kubernetes (Recommended)
-Uses environment variables for configuration, supporting both secrets and configmaps:
-
-```yaml
-bot:
-  secrets:
-    discordToken: "your-bot-token"
-    discordClientId: "your-client-id"
-    discordForums: '["forum-id-1", "forum-id-2"]'
-```
-
-### Docker Compose (Local Development)
-Uses `auth.json` file mount for backward compatibility:
-
-```yaml
-# docker-compose.yml
-services:
-  bingus-bot:
-    volumes:
-      - ./bingus-bot/auth.json:/app/bingus-bot/auth.json
-```
-
-The bot automatically detects the environment and falls back to environment variables if `auth.json` is not found.
-
-## Upgrading
+### When CI Fails
 
 ```bash
-# Upgrade to a new version
-helm upgrade bingus ./helm --namespace bingus
+❌ Configuration schema drift detected!
 
-# Upgrade with new values
-helm upgrade bingus ./helm --namespace bingus -f values-prod.yaml
+🔧 To fix this issue:
+   1. Run: cd helm && ./check-config-drift.sh
+   2. Update helm/templates/api/configmap.yaml with missing fields
+   3. Test: ./validate-config.sh
+   4. Commit and push changes
 ```
 
-## Uninstalling
+## Development Workflow
+
+1. **Change config files** → `BingusApi/config/*.json`
+2. **Run validation** → `cd helm && ./validate-config.sh`
+3. **Fix any drift** → Update `templates/api/configmap.yaml`
+4. **Test deployment** → `helm template . --values values.yaml`
+5. **Commit & push** → CI validates automatically
+
+## Advanced Usage
+
+### Custom Value Files
 
 ```bash
-# Uninstall the release
-helm uninstall bingus --namespace bingus
+# Production
+helm install bingus-search . -f values.yaml -f values-prod.yaml
 
-# Optionally delete the namespace
-kubectl delete namespace bingus
+# Development
+helm install bingus-search . -f values.yaml -f values-dev.yaml
 ```
 
-## Monitoring & Troubleshooting
-
-### Check Pod Status
+### Debugging
 
 ```bash
-kubectl get pods -n bingus
-kubectl logs -f deployment/bingus-encoder -n bingus
-kubectl logs -f deployment/bingus-api -n bingus
-kubectl logs -f deployment/bingus-bot -n bingus
-```
+# See final merged config
+helm template . --values values.yaml | grep -A 100 "appsettings.json:"
 
-### Health Checks
-
-```bash
-# Check encoder health
-kubectl port-forward svc/bingus-encoder 5000:5000 -n bingus
-curl http://localhost:5000/health
-
-# Check API health
-kubectl port-forward svc/bingus-api 8080:8080 -n bingus
-curl http://localhost:8080/health
-```
-
-### Storage
-
-```bash
-# Check persistent volumes
-kubectl get pvc -n bingus
-kubectl describe pvc bingus-encoder-model-cache -n bingus
-```
-
-## Architecture
-
-```mermaid
-graph TB
-    subgraph "Kubernetes Cluster"
-        subgraph "Bingus Namespace"
-            Bot[Bot Service]
-            API[API Service]
-            Encoder[Encoder Service]
-
-            subgraph "Storage"
-                ModelCache[Model Cache PVC]
-                EmbedCache[Embedding Cache PVC]
-                APIData[API Data PVC]
-            end
-        end
-
-        subgraph "Ingress"
-            Traefik[Traefik Ingress]
-        end
-    end
-
-    Internet --> Traefik
-    Traefik --> API
-    Bot --> API
-    API --> Encoder
-    Encoder --> ModelCache
-    Encoder --> EmbedCache
-    API --> APIData
+# Test specific overrides
+helm template . --set api.config.logLevel="Debug" --values values.yaml
 ```

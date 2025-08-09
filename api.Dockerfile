@@ -1,10 +1,17 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build-env
 WORKDIR /usr/src/app
 
-# Copy everything
-COPY . .
-# Restore as distinct layers
+# Copy project files first (better caching)
+COPY BingusApi/*.csproj BingusApi/
+COPY BingusLib/*.csproj BingusLib/
+COPY BingusBackend.sln .
+
+# Restore dependencies
 RUN dotnet restore BingusApi
+
+# Copy source code after restore
+COPY . .
+
 # Build and publish a release
 RUN dotnet publish BingusApi -c Release -o out -p:CSharpier_Bypass=true
 
