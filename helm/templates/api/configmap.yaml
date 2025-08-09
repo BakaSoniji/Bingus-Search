@@ -6,7 +6,6 @@ metadata:
   namespace: {{ .Values.global.namespace }}
   labels:
     {{- include "bingus.api.labels" . | nindent 4 }}
-    app.kubernetes.io/component: api
 data:
     # .NET API configuration
   ASPNETCORE_ENVIRONMENT: {{ .Values.api.config.aspnetcoreEnvironment | quote }}

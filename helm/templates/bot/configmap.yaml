@@ -6,7 +6,6 @@ metadata:
   namespace: {{ .Values.global.namespace }}
   labels:
     {{- include "bingus.bot.labels" . | nindent 4 }}
-    app.kubernetes.io/component: bot
 data:
     # Node.js bot configuration
   NODE_ENV: {{ .Values.bot.config.nodeEnv | quote }}

@@ -7,7 +7,6 @@ metadata:
   namespace: {{ .Values.global.namespace }}
   labels:
     {{- include "bingus.encoder.labels" . | nindent 4 }}
-    app.kubernetes.io/component: encoder
     app.kubernetes.io/part-of: storage
 spec:
   accessModes:
@@ -28,7 +27,6 @@ metadata:
   namespace: {{ .Values.global.namespace }}
   labels:
     {{- include "bingus.encoder.labels" . | nindent 4 }}
-    app.kubernetes.io/component: encoder
     app.kubernetes.io/part-of: storage
 spec:
   accessModes:
@@ -49,7 +47,6 @@ metadata:
   namespace: {{ .Values.global.namespace }}
   labels:
     {{- include "bingus.encoder.labels" . | nindent 4 }}
-    app.kubernetes.io/component: encoder
     app.kubernetes.io/part-of: storage
 spec:
   accessModes:

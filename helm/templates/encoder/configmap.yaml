@@ -6,7 +6,6 @@ metadata:
   namespace: {{ .Values.global.namespace }}
   labels:
     {{- include "bingus.encoder.labels" . | nindent 4 }}
-    app.kubernetes.io/component: encoder
 data:
   # Encoder service configuration
   PORT: "{{ .Values.encoder.service.targetPort }}"
