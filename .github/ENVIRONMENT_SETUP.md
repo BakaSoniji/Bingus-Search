@@ -9,7 +9,7 @@ This fork uses a simple, automated release pipeline:
 - Versioning: CalVer `vYYYY.MM.P` (e.g., `v2025.08.0`), auto-incremented on each push to `main`.
 - Pipeline: On push to `main`, GitHub Actions will:
     - Build and push containers for `encoder`, `api`, and `bot` with tags `latest` and `vYYYY.MM.P`.
-    - Update and package the Helm chart (`helm/`) with the same CalVer version and publish to OCI.
+    - Update and package the Helm chart (`helm/`) with the same CalVer version and publish to Cloudflare R2.
     - Create a GitHub Release with a generated changelog.
     - Optionally deploy the frontend to Cloudflare R2 (enable via repo variable `ENABLE_FRONTEND_DEPLOYMENT=true`).
 
@@ -71,6 +71,18 @@ Configure these in your repository settings under **Settings > Secrets and varia
 
 *Required if frontend deployment is enabled
 
+### **Helm Repository (Cloudflare R2)**
+| Secret | Required | Description |
+|--------|----------|-------------|
+| `CLOUDFLARE_R2_CHARTS_BUCKET_NAME` | Yes** | R2 bucket name for Helm charts (e.g., "bingus-helm-charts") |
+| `CLOUDFLARE_R2_CHARTS_ACCESS_KEY_ID` | No*** | R2 API Access Key ID for Helm chart repository (falls back to frontend credentials) |
+| `CLOUDFLARE_R2_CHARTS_SECRET_KEY` | No*** | R2 API Secret Access Key for Helm chart repository (falls back to frontend credentials) |
+| `CLOUDFLARE_CHARTS_ZONE_ID` | No | Zone ID for charts domain cache purging (falls back to general zone) |
+| `CLOUDFLARE_CHARTS_API_TOKEN` | No | API token for charts domain cache purging (falls back to general cache token) |
+
+**Required for Helm chart publishing
+***Optional - will reuse frontend R2 credentials if not provided
+
 ### **Container Registry (Optional)**
 | Secret | Required | Description |
 |--------|----------|-------------|
@@ -95,12 +107,20 @@ ENABLE_FRONTEND_DEPLOYMENT=true
 FRONTEND_API_BASE_URL=https://api.example.com
 FRONTEND_CUSTOM_DOMAIN=search.example.com  # optional
 ENABLE_CONTAINER_BUILDS=true
-
 # In GitHub Secrets (not variables):
+# Frontend R2 bucket
 # CLOUDFLARE_R2_ACCESS_KEY_ID=your-r2-access-key-id
 # CLOUDFLARE_R2_SECRET_ACCESS_KEY=your-r2-secret-access-key
 # CLOUDFLARE_R2_BUCKET_NAME=my-frontend-bucket
 # CLOUDFLARE_ACCOUNT_ID=your-account-id
+
+# Helm charts R2 bucket (minimal setup - reuses frontend credentials)
+# CLOUDFLARE_R2_CHARTS_BUCKET_NAME=my-helm-charts-bucket
+
+# Optional: separate credentials for charts (for better security)
+# CLOUDFLARE_R2_CHARTS_ACCESS_KEY_ID=your-charts-r2-access-key-id
+# CLOUDFLARE_R2_CHARTS_SECRET_KEY=your-charts-r2-secret-key
+
 ENABLE_RELEASES=true
 ENABLE_HELM_PUBLISHING=true
 ```
@@ -176,6 +196,8 @@ The container builds are now optimized for efficiency:
 
 ## 🛠️ **Cloudflare R2 Setup**
 
+### **Frontend Hosting**
+
 1. **Create R2 Bucket**:
    ```bash
    # In Cloudflare dashboard
@@ -211,11 +233,47 @@ The container builds are now optimized for efficiency:
    Settings > Custom Domains > Connect Domain
    ```
 
-5. **Benefits of AWS CLI approach**:
-   - **Separate credentials**: R2-specific API keys vs main Cloudflare account
-   - **Better performance**: `aws s3 sync` with delta uploads and deletions
-   - **Familiar tooling**: Standard S3 commands work with R2
-   - **Granular permissions**: R2 credentials only have R2 access
+### **Helm Chart Repository**
+
+1. **Create R2 Bucket for Charts**:
+   ```bash
+   # In Cloudflare dashboard
+   R2 Object Storage > Create Bucket > bingus-helm-charts
+   ```
+
+2. **Configure Custom Domain**:
+   ```bash
+   # In R2 bucket settings
+   Settings > Custom Domains > Connect Domain > charts.bakas.io
+   ```
+
+3. **Create R2 API Tokens** (optional - can reuse frontend credentials):
+   ```bash
+   # Option A: Reuse existing frontend R2 credentials (simpler)
+   # Just set CLOUDFLARE_R2_CHARTS_BUCKET_NAME and it will automatically
+   # use your existing CLOUDFLARE_R2_ACCESS_KEY_ID and CLOUDFLARE_R2_SECRET_ACCESS_KEY
+
+   # Option B: Create separate credentials for charts (more secure)
+   # In Cloudflare dashboard:
+   # R2 Object Storage > Manage R2 API tokens > Create API token
+   #
+   # Permissions needed:
+   # - Object Read & Write for bingus-helm-charts bucket only
+   #
+   # This gives you:
+   # - Access Key ID (CLOUDFLARE_R2_CHARTS_ACCESS_KEY_ID)
+   # - Secret Access Key (CLOUDFLARE_R2_CHARTS_SECRET_KEY)
+   ```
+
+4. **Test Helm Repository** (after first release):
+   ```bash
+   # Add repository
+   helm repo add bingus https://charts.bakas.io
+   helm repo update
+
+   # Install chart
+   helm install bingus bingus/bingus --version 2025.08.8
+   ```
 
 ## 🔍 **Troubleshooting**
 
@@ -232,8 +290,9 @@ The container builds are now optimized for efficiency:
 - For cache purging issues, verify `CLOUDFLARE_CACHE_API_TOKEN` has zone permissions
 
 ### **Helm Publishing Fails**
-- Ensure `GITHUB_TOKEN` has packages write permission
-- Check OCI registry access in repository settings
+- Verify all R2 charts secrets are set correctly (`CLOUDFLARE_R2_CHARTS_ACCESS_KEY_ID`, `CLOUDFLARE_R2_CHARTS_SECRET_KEY`, etc.)
+- Check R2 charts bucket exists and API credentials have read/write permissions
+- Ensure `CLOUDFLARE_ACCOUNT_ID` is correct (used for R2 endpoint URL)
 - Set `ENABLE_HELM_PUBLISHING=false` to disable
 
 ## 🤔 **Need Help?**

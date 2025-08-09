@@ -297,10 +297,74 @@ jobs:
 
           helm package helm/ --destination ./charts/
 
-          # Create index
-          helm repo index ./charts/ --url https://github.com/${{ github.repository }}/releases/download/${{ needs.validate-release.outputs.version }}/
+          # Create index for Cloudflare R2 Helm repository
+          helm repo index ./charts/ --url https://charts.bakas.io
 
-      - name: Upload Helm chart artifacts
+      - name: Upload to Cloudflare R2 Helm Repository
+        run: |
+          # Smart credential detection - use dedicated charts credentials or fall back to frontend credentials
+          if [[ -n "${{ secrets.CLOUDFLARE_R2_CHARTS_ACCESS_KEY_ID }}" ]]; then
+            echo "📊 Using dedicated charts R2 credentials"
+            ACCESS_KEY_ID="${{ secrets.CLOUDFLARE_R2_CHARTS_ACCESS_KEY_ID }}"
+            SECRET_KEY="${{ secrets.CLOUDFLARE_R2_CHARTS_SECRET_KEY }}"
+            BUCKET_NAME="${{ secrets.CLOUDFLARE_R2_CHARTS_BUCKET_NAME }}"
+          elif [[ -n "${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}" ]]; then
+            echo "📊 Reusing frontend R2 credentials for charts"
+            ACCESS_KEY_ID="${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}"
+            SECRET_KEY="${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}"
+            BUCKET_NAME="${{ secrets.CLOUDFLARE_R2_CHARTS_BUCKET_NAME }}"
+          else
+            echo "❌ No R2 credentials found - set either CLOUDFLARE_R2_CHARTS_* or CLOUDFLARE_R2_* secrets"
+            exit 1
+          fi
+
+          # Validate required configuration
+          if [[ -z "$BUCKET_NAME" ]]; then
+            echo "❌ CLOUDFLARE_R2_CHARTS_BUCKET_NAME is required"
+            exit 1
+          fi
+
+          # Configure AWS CLI for Cloudflare R2
+          aws configure set aws_access_key_id "$ACCESS_KEY_ID"
+          aws configure set aws_secret_access_key "$SECRET_KEY"
+          aws configure set default.region auto
+
+          # Upload charts to R2 bucket
+          echo "🚀 Uploading Helm repository to Cloudflare R2..."
+          aws s3 sync ./charts/ s3://"$BUCKET_NAME"/ \
+            --endpoint-url https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com \
+            --delete \
+            --cache-control "public, max-age=300"
+          echo "✅ Helm repository uploaded successfully"
+
+      - name: Purge Cloudflare cache (smart detection)
+        run: |
+          # Smart detection - use dedicated charts API token or fall back to general cache token
+          API_TOKEN=""
+          ZONE_ID=""
+
+          if [[ -n "${{ secrets.CLOUDFLARE_CHARTS_API_TOKEN }}" ]]; then
+            echo "📊 Using dedicated charts API token"
+            API_TOKEN="${{ secrets.CLOUDFLARE_CHARTS_API_TOKEN }}"
+            ZONE_ID="${{ secrets.CLOUDFLARE_CHARTS_ZONE_ID }}"
+          elif [[ -n "${{ secrets.CLOUDFLARE_CACHE_API_TOKEN }}" ]]; then
+            echo "📊 Reusing general cache API token for charts"
+            API_TOKEN="${{ secrets.CLOUDFLARE_CACHE_API_TOKEN }}"
+            ZONE_ID="${{ secrets.CLOUDFLARE_ZONE_ID }}"
+          fi
+
+          if [[ -n "$API_TOKEN" && -n "$ZONE_ID" ]]; then
+            echo "🧹 Purging Cloudflare cache for charts.bakas.io"
+            curl -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/purge_cache" \
+              -H "Authorization: Bearer $API_TOKEN" \
+              -H "Content-Type: application/json" \
+              --data '{"files":["https://charts.bakas.io/index.yaml"]}' \
+              --fail && echo "✅ Cache purged successfully" || echo "⚠️ Cache purge failed (non-critical)"
+          else
+            echo "ℹ️ Skipping cache purge - no API token configured"
+          fi
+
+      - name: Upload Helm chart artifacts (backup)
         uses: actions/upload-artifact@v4
         with:
           name: helm-charts
@@ -351,7 +415,13 @@ jobs:
           echo "" >> CHANGELOG.md
           echo "Install with:" >> CHANGELOG.md
           echo "\`\`\`bash" >> CHANGELOG.md
-          echo "helm install bingus oci://ghcr.io/${REPO_LOWER}/helm/bingus --version ${{ needs.validate-release.outputs.version }}" >> CHANGELOG.md
+          echo "helm repo add bingus https://charts.bakas.io" >> CHANGELOG.md
+          echo "helm install bingus bingus/bingus --version ${{ needs.validate-release.outputs.version }}" >> CHANGELOG.md
+          echo "\`\`\`" >> CHANGELOG.md
+          echo "" >> CHANGELOG.md
+          echo "Or directly:" >> CHANGELOG.md
+          echo "\`\`\`bash" >> CHANGELOG.md
+          echo "helm install bingus https://charts.bakas.io/bingus-${{ needs.validate-release.outputs.version }}.tgz" >> CHANGELOG.md
           echo "\`\`\`" >> CHANGELOG.md
 
       - name: Create GitHub Release
