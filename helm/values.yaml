@@ -107,7 +107,7 @@ api:
     encoderUrl: "http://bingus-encoder:5000"
     logLevel: "Information"
     extraEnv: {}
-    
+
     # Bingus configuration (for bingus_config.json)
     bingus:
       encoderType: "llama"
@@ -116,11 +116,11 @@ api:
       llamaModelPath: "models/Bingus-q2a-v14.gguf"
       hnswSeed: 42
       useQ2a: true
-    
+
     # FAQ configuration (for faq_config.json) - defaults to empty, can be overridden
     faq:
       faqs: []
-    
+
     # Rate limiting configuration (for appsettings.json)
     rateLimiting:
       enabled: true

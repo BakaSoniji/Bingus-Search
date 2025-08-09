@@ -59,7 +59,14 @@ spec:
             {{- toYaml .Values.api.resources | nindent 12 }}
           volumeMounts:
             - name: config
-              mountPath: /usr/src/app/config
+              mountPath: /usr/src/app/config/appsettings.json
+              subPath: appsettings.json
+            - name: config
+              mountPath: /usr/src/app/config/bingus_config.json
+              subPath: bingus_config.json
+            - name: config
+              mountPath: /usr/src/app/config/faq_config.json
+              subPath: faq_config.json
             {{- if .Values.api.persistence.enabled }}
             - name: api-data
               mountPath: /app/data
