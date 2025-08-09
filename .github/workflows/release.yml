@@ -265,6 +265,13 @@ jobs:
         with:
           version: '3.12.0'
 
+      - name: Copy configs into chart
+        run: |
+          cd helm
+          chmod +x copy-configs.sh
+          ./copy-configs.sh
+          echo "✅ Configs copied into chart"
+
       - name: Update Helm chart version
         run: |
           VERSION="${{ needs.validate-release.outputs.version }}"
@@ -282,6 +289,12 @@ jobs:
 
       - name: Package Helm chart
         run: |
+          # Remove development files that aren't needed in the packaged chart
+          cd helm
+          rm -f CONFIG-SYNC.md README.md
+          rm -f copy-configs.sh check-config-drift.sh validate-config.sh
+          cd ..
+
           helm package helm/ --destination ./charts/
 
           # Create index

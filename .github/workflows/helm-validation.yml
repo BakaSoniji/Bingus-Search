@@ -72,6 +72,6 @@ jobs:
           echo "## Generated Configuration Preview" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### appsettings.json" >> $GITHUB_STEP_SUMMARY
-          echo '```json' >> $GITHUB_STEP_SUMMARY
+          echo '```yaml' >> $GITHUB_STEP_SUMMARY
           helm template . --values values.yaml | grep -A 20 "appsettings.json:" | grep -A 20 "|" | head -15 >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
