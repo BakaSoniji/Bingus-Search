@@ -15,7 +15,7 @@ namespace BingusLib.Config
 
         public T? LoadConfig(string file)
         {
-            using var stream = new FileStream(file, FileMode.Open);
+            using var stream = new FileStream(file, FileMode.Open, FileAccess.Read);
             return JsonSerializer.Deserialize<T>(stream, Options);
         }
 
