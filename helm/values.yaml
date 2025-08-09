@@ -107,6 +107,19 @@ api:
     encoderUrl: "http://bingus-encoder:5000"
     logLevel: "Information"
     extraEnv: {}
+    
+    # Bingus configuration (for bingus_config.json)
+    bingus:
+      encoderType: "llama"
+      useModelPath: "models/onnx/use_l_v5.onnx"
+      apiUri: "http://bingus-encoder:5000"
+      llamaModelPath: "models/Bingus-q2a-v14.gguf"
+      hnswSeed: 42
+      useQ2a: true
+    
+    # FAQ configuration (for faq_config.json) - defaults to empty, can be overridden
+    faq:
+      faqs: []
 
   secrets:
     # .NET API doesn't need database URL - uses in-memory or config

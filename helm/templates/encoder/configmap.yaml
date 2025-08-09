@@ -35,4 +35,12 @@ data:
   {{ $key }}: {{ $value | quote }}
   {{- end }}
   {{- end }}
+
+  # JSON Configuration Files
+  encoder_config.json: |
+    {
+      "model": {{ .Values.encoder.config.modelName | quote }},
+      "host": "0.0.0.0",
+      "port": {{ .Values.encoder.service.targetPort }}
+    }
 {{- end }}

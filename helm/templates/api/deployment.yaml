@@ -57,20 +57,25 @@ spec:
             failureThreshold: {{ .Values.api.probes.readiness.failureThreshold }}
           resources:
             {{- toYaml .Values.api.resources | nindent 12 }}
-          {{- if .Values.api.persistence.enabled }}
           volumeMounts:
+            - name: config
+              mountPath: /usr/src/app/config
+            {{- if .Values.api.persistence.enabled }}
             - name: api-data
               mountPath: /app/data
               {{- if .Values.api.persistence.subPath }}
               subPath: {{ .Values.api.persistence.subPath }}
               {{- end }}
-          {{- end }}
-      {{- if .Values.api.persistence.enabled }}
+            {{- end }}
       volumes:
+        - name: config
+          configMap:
+            name: {{ include "bingus.fullname" . }}-api-config
+        {{- if .Values.api.persistence.enabled }}
         - name: api-data
           persistentVolumeClaim:
             claimName: {{ include "bingus.fullname" . }}-api-data
-      {{- end }}
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

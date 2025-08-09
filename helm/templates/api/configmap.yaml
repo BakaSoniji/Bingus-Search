@@ -7,7 +7,7 @@ metadata:
   labels:
     {{- include "bingus.api.labels" . | nindent 4 }}
 data:
-    # .NET API configuration
+  # .NET API configuration (environment variables)
   ASPNETCORE_ENVIRONMENT: {{ .Values.api.config.aspnetcoreEnvironment | quote }}
   ASPNETCORE_URLS: {{ .Values.api.config.aspnetcoreUrls | quote }}
 
@@ -23,4 +23,18 @@ data:
   {{ $key }}: {{ $value | quote }}
   {{- end }}
   {{- end }}
+
+  # JSON Configuration Files
+  bingus_config.json: |
+    {
+      "encoder_type": {{ .Values.api.config.bingus.encoderType | quote }},
+      "use_model_path": {{ .Values.api.config.bingus.useModelPath | quote }},
+      "api_uri": {{ .Values.api.config.bingus.apiUri | quote }},
+      "llama_model_path": {{ .Values.api.config.bingus.llamaModelPath | quote }},
+      "hnsw_seed": {{ .Values.api.config.bingus.hnswSeed }},
+      "use_q2a": {{ .Values.api.config.bingus.useQ2a }}
+    }
+
+  faq_config.json: |
+    {{- .Values.api.config.faq | toJson | nindent 4 }}
 {{- end }}
