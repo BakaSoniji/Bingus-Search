@@ -120,6 +120,44 @@ api:
     # FAQ configuration (for faq_config.json) - defaults to empty, can be overridden
     faq:
       faqs: []
+    
+    # Rate limiting configuration (for appsettings.json)
+    rateLimiting:
+      enabled: true
+      ipWhitelist:
+        - "127.0.0.1"
+        - "::1/10"
+        - "10.0.0.0/8"
+        - "172.16.0.0/12"
+        - "192.168.0.0/16"
+      generalRules:
+        - endpoint: "post:*"
+          period: "1m"
+          limit: 60
+        - endpoint: "post:*"
+          period: "1s"
+          limit: 5
+        - endpoint: "put:*"
+          period: "1m"
+          limit: 60
+        - endpoint: "put:*"
+          period: "1s"
+          limit: 5
+        - endpoint: "delete:*"
+          period: "1m"
+          limit: 60
+        - endpoint: "delete:*"
+          period: "1s"
+          limit: 5
+        - endpoint: "get:*"
+          period: "1m"
+          limit: 200
+        - endpoint: "get:/Faq/Search"
+          period: "10s"
+          limit: 3
+        - endpoint: "get:/Faq/Config"
+          period: "5s"
+          limit: 1
 
   secrets:
     # .NET API doesn't need database URL - uses in-memory or config

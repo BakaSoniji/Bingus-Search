@@ -25,6 +25,26 @@ data:
   {{- end }}
 
   # JSON Configuration Files
+  appsettings.json: |
+    {
+      "Logging": {
+        "LogLevel": {
+          "Default": {{ .Values.api.config.logLevel | quote }},
+          "Microsoft.AspNetCore": "Warning"
+        }
+      },
+      "AllowedHosts": "*",
+      "IpRateLimiting": {
+        "EnableEndpointRateLimiting": {{ .Values.api.config.rateLimiting.enabled }},
+        "StackBlockedRequests": false,
+        "RealIpHeader": "X-Forwarded-For",
+        "ClientIdHeader": "X-ClientId",
+        "HttpStatusCode": 429,
+        "IpWhitelist": {{ .Values.api.config.rateLimiting.ipWhitelist | toJson }},
+        "GeneralRules": {{ .Values.api.config.rateLimiting.generalRules | toJson }}
+      }
+    }
+
   bingus_config.json: |
     {
       "encoder_type": {{ .Values.api.config.bingus.encoderType | quote }},
