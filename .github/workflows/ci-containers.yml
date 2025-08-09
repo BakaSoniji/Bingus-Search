@@ -376,7 +376,7 @@ jobs:
             type=registry,ref=${{ env.REGISTRY }}/${{ steps.repo.outputs.name }}/${{ matrix.service }}:buildcache-amd64,mode=max
 
   build-images-arm64:
-    runs-on: ubuntu-24.04-arm64
+    runs-on: ubuntu-24.04-arm
     needs: [detect-changes, lint, test-services]
     if: always() && (needs.lint.result == 'success') && (needs.test-services.result == 'success' || needs.test-services.result == 'skipped') && vars.ENABLE_CONTAINER_BUILDS == 'true'
 

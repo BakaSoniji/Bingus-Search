@@ -154,7 +154,7 @@ jobs:
             type=registry,ref=${{ env.REGISTRY }}/${{ steps.repo.outputs.name }}/${{ matrix.service }}:buildcache-amd64,mode=max
 
   build-release-images-arm64:
-    runs-on: ubuntu-24.04-arm64
+    runs-on: ubuntu-24.04-arm
     needs: validate-release
 
     strategy:
