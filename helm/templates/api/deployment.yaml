@@ -66,7 +66,7 @@ spec:
               subPath: bingus_config.json
             {{- if .Values.api.persistence.enabled }}
             - name: api-data
-              mountPath: /app/data
+              mountPath: /usr/src/app/embedding_cache
               {{- if .Values.api.persistence.subPath }}
               subPath: {{ .Values.api.persistence.subPath }}
               {{- end }}
