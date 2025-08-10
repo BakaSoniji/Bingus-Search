@@ -436,7 +436,36 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  publish-helm-chart:
+    runs-on: ubuntu-latest
+    needs: [validate-release, create-release]
 
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: '3.12.0'
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download Helm charts
+        uses: actions/download-artifact@v4
+        with:
+          name: helm-charts
+          path: ./charts/
+
+      - name: Push Helm chart to OCI registry
+        run: |
+          CHART_FILE=$(ls charts/*.tgz)
+          REPO_LOWER=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')
+          helm push "$CHART_FILE" oci://${{ env.REGISTRY }}/${REPO_LOWER}/helm
 
   deploy-frontend-cloudflare:
     runs-on: ubuntu-latest
@@ -516,16 +545,16 @@ jobs:
 
   notify-release:
     runs-on: ubuntu-latest
-    needs: [validate-release, create-release, package-helm-chart, deploy-frontend-cloudflare]
+    needs: [validate-release, create-release, publish-helm-chart, deploy-frontend-cloudflare]
     if: always()
 
     steps:
       - name: Notify release completion
         run: |
-          if [[ "${{ needs.create-release.result }}" == "success" && "${{ needs.package-helm-chart.result }}" == "success" ]]; then
+          if [[ "${{ needs.create-release.result }}" == "success" && "${{ needs.publish-helm-chart.result }}" == "success" ]]; then
             echo "🎉 Release ${{ needs.validate-release.outputs.version }} completed successfully!"
             echo "📦 Container images published to ghcr.io"
-            echo "⎈ Helm chart published to Cloudflare R2"
+            echo "⎈ Helm chart published to OCI registry"
             if [[ "${{ needs.deploy-frontend-cloudflare.result }}" == "success" ]]; then
               echo "🌐 Frontend deployed to Cloudflare R2"
             fi
