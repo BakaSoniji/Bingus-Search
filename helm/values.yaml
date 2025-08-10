@@ -136,12 +136,14 @@ api:
 
   probes:
     liveness:
+      enabled: true
       path: "/health"
       initialDelaySeconds: 30
       periodSeconds: 30
       timeoutSeconds: 5
       failureThreshold: 3
     readiness:
+      enabled: true
       path: "/ready"
       initialDelaySeconds: 15
       periodSeconds: 10
