@@ -94,6 +94,17 @@ api:
     enabled: true
     hostname: bingus.bakas.io
     accessPolicy: public   # Public access via Traefik
+    cors:
+      enabled: true
+      accessControlAllowMethods:
+        - GET
+        - OPTIONS
+      accessControlAllowHeaders:
+        - "*"
+      accessControlAllowOriginList:
+        - "https://bingus.bscotch.ca"
+      accessControlMaxAge: 100
+      addVaryHeader: true
 
   persistence:
     enabled: false

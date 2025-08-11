@@ -12,8 +12,13 @@ spec:
   routes:
     - match: Host(`{{ .Values.api.ingress.hostname }}`)
       kind: Rule
+      {{- if .Values.api.ingress.cors.enabled }}
+      middlewares:
+        - name: {{ include "bingus.fullname" . }}-api-cors
+          namespace: {{ .Values.global.namespace }}
+      {{- end }}
       services:
         - name: {{ include "bingus.fullname" . }}-api
           port: {{ .Values.api.service.port }}
-      # Middlewares intentionally not managed here to avoid coupling to cluster specifics
+      # Middlewares managed via values to mirror docker-compose Traefik headers
 {{- end }}
