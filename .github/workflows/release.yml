@@ -329,11 +329,23 @@ jobs:
           aws configure set aws_secret_access_key "$SECRET_KEY"
           aws configure set default.region auto
 
+          # Merge with existing remote index.yaml (to keep history)
+          echo "🔗 Checking for existing index.yaml in R2..."
+          ENDPOINT="https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com"
+          if aws s3 ls s3://"$BUCKET_NAME"/index.yaml --endpoint-url "$ENDPOINT" > /dev/null 2>&1; then
+            echo "📥 Found existing index.yaml. Downloading and merging..."
+            mkdir -p ./charts
+            aws s3 cp s3://"$BUCKET_NAME"/index.yaml ./charts/remote-index.yaml --endpoint-url "$ENDPOINT"
+            helm repo index ./charts/ --url https://charts.bakas.io --merge ./charts/remote-index.yaml
+          else
+            echo "ℹ️ No existing index.yaml found. Creating new index..."
+            helm repo index ./charts/ --url https://charts.bakas.io
+          fi
+
           # Upload charts to R2 bucket
           echo "🚀 Uploading Helm repository to Cloudflare R2..."
           aws s3 sync ./charts/ s3://"$BUCKET_NAME"/ \
-            --endpoint-url https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com \
-            --delete \
+            --endpoint-url "$ENDPOINT" \
             --cache-control "public, max-age=300"
           echo "✅ Helm repository uploaded successfully"
 
